@@ -22,7 +22,7 @@ const AvatarGenerator = ({ apiKey }) => {
   const fileInputRef = useRef(null);
   const audioInputRef = useRef(null);
   
-  // Workflow JSON object that includes audio processing
+  // Super basic workflow JSON object with only core ComfyUI nodes
   const workflowJson = {
     "1": {
       "class_type": "LoadImage",
@@ -42,30 +42,10 @@ const AvatarGenerator = ({ apiKey }) => {
       }
     },
     "3": {
-      "class_type": "LoadAudio",
-      "inputs": {
-        "audio": "",
-        "upload": "audio"
-      }
-    },
-    "4": {
-      "class_type": "VHS_SadTalker",
-      "inputs": {
-        "image": ["2", 0],
-        "audio": ["3", 0],
-        "preprocess": "none",
-        "still_mode": true,
-        "expression_scale": 1,
-        "use_enhancer": false,
-        "batch_size": 1,
-        "result_fps": 25
-      }
-    },
-    "5": {
       "class_type": "SaveImage",
       "inputs": {
-        "images": ["4", 0],
-        "filename_prefix": "talking_portrait_",
+        "images": ["2", 0],
+        "filename_prefix": "portrait_",
         "jpeg_quality": 95,
         "overwrite_mode": "overwrite"
       }
@@ -100,10 +80,11 @@ const AvatarGenerator = ({ apiKey }) => {
       return;
     }
     
-    if (!audioFile) {
-      alert('Please upload an audio file');
-      return;
-    }
+    // Since we're only processing images for now, audio is optional
+    // if (!audioFile) {
+    //   alert('Please upload an audio file');
+    //   return;
+    // }
     
     if (!apiKey) {
       alert('Please enter your API key');
@@ -111,6 +92,7 @@ const AvatarGenerator = ({ apiKey }) => {
     }
     
     try {
+      // For now, we're just passing the image
       await generateAvatar(portraitImage, audioFile, workflowJson, apiKey);
     } catch (error) {
       console.error('Error generating avatar:', error);
@@ -130,10 +112,10 @@ const AvatarGenerator = ({ apiKey }) => {
 
   return (
     <div className="portrait-generator">
-      <h2>Talking Portrait Generator</h2>
+      <h2>ComfyUI Image Processor</h2>
       <form onSubmit={onSubmit}>
         <div className="upload-section">
-          <h3>Upload Your Portrait</h3>
+          <h3>Upload Your Image</h3>
           <input
             type="file"
             onChange={handlePortraitChange}
@@ -144,13 +126,13 @@ const AvatarGenerator = ({ apiKey }) => {
           
           {portraitPreviewUrl && (
             <div className="preview">
-              <img src={portraitPreviewUrl} alt="Portrait preview" />
+              <img src={portraitPreviewUrl} alt="Image preview" />
             </div>
           )}
         </div>
 
         <div className="upload-section">
-          <h3>Upload Your Audio</h3>
+          <h3>Upload Audio (Optional)</h3>
           <input
             type="file"
             onChange={handleAudioChange}
@@ -169,10 +151,10 @@ const AvatarGenerator = ({ apiKey }) => {
         <div className="action-buttons">
           <button 
             type="submit" 
-            disabled={!isPortraitUploaded || !isAudioUploaded || loading || !apiKey}
+            disabled={!isPortraitUploaded || loading || !apiKey}
             className="generate-btn"
           >
-            Generate Talking Portrait
+            Process Image
           </button>
           
           {(isPortraitUploaded || isAudioUploaded || result) && (
@@ -190,7 +172,7 @@ const AvatarGenerator = ({ apiKey }) => {
       
       {loading && (
         <div className="processing">
-          <h3>Processing Your Talking Portrait</h3>
+          <h3>Processing Your Image</h3>
           <div className="progress-bar">
             <div 
               className="progress" 
@@ -210,19 +192,26 @@ const AvatarGenerator = ({ apiKey }) => {
       
       {result && (
         <div className="result">
-          <h3>Your Talking Portrait</h3>
+          <h3>Your Processed Image</h3>
           <div className="result-image">
-            <video 
-              controls
-              autoPlay
-              loop
-              src={`data:video/mp4;base64,${result.videoUrl}`} 
-              alt="Generated talking portrait" 
-            />
+            {result.type === 'video' ? (
+              <video 
+                controls
+                autoPlay
+                loop
+                src={`data:video/mp4;base64,${result.videoUrl}`} 
+                alt="Generated video" 
+              />
+            ) : (
+              <img 
+                src={`data:image/jpeg;base64,${result.videoUrl}`} 
+                alt="Processed image" 
+              />
+            )}
           </div>
           <a 
-            href={`data:video/mp4;base64,${result.videoUrl}`} 
-            download="talking_portrait.mp4"
+            href={`data:${result.type === 'video' ? 'video/mp4' : 'image/jpeg'};base64,${result.videoUrl}`} 
+            download={result.type === 'video' ? "processed_video.mp4" : "processed_image.jpg"}
             className="download-btn"
           >
             Download

@@ -16,8 +16,8 @@ function App() {
         <div className="content-wrapper">
           <StoredApiKey onChange={handleApiKeyChange} />
           <div className="app-title">
-            <h1>Talking Portrait Generator</h1>
-            <p>Upload a portrait image and an audio file to create a talking portrait using ComfyUI</p>
+            <h1>ComfyUI Image Processor</h1>
+            <p>Upload an image and process it using ComfyUI</p>
           </div>
           <AvatarGenerator apiKey={apiKey} />
         </div>
