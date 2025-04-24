@@ -253,29 +253,48 @@ class ComfyUIClient {
   /**
    * Queue a workflow for execution
    * @param {Object} workflow - Workflow JSON
-   * @returns {Promise<string|null>} Prompt ID or null if queuing failed
+   * @returns {Promise<string|null>} Prompt ID or null if queueing failed
    */
   async queueWorkflow(workflow) {
-    const queueUrl = `${this.serverUrl}/prompt`;
-    
     try {
-      const response = await axios.post(queueUrl, {
+      console.log('🚀 Queueing workflow');
+      
+      // Structure the payload - needs to match the format ComfyUI expects
+      const payload = {
         prompt: workflow,
         client_id: this.clientId
-      }, {
-        headers: this._getHeaders()
-      });
+      };
+      
+      console.log('Sending payload:', JSON.stringify(payload, null, 2));
+      
+      const response = await axios.post(
+        `${this.serverUrl}/prompt`,
+        payload,
+        { headers: this._getHeaders() }
+      );
       
       if (response.status === 200) {
-        const promptId = response.data.prompt_id;
-        console.log(`✅ Workflow queued with prompt ID: ${promptId}`);
+        const result = response.data;
+        const promptId = result.prompt_id;
+        console.log(`✅ Workflow queued with ID: ${promptId}`);
         return promptId;
       } else {
         console.error(`❌ Failed to queue workflow: ${response.status} - ${response.data}`);
         return null;
       }
     } catch (error) {
-      console.error(`❌ Exception during workflow queuing: ${error.message}`);
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        console.error(`❌ Server responded with error: ${error.response.status}`);
+        console.error(`Error details: ${JSON.stringify(error.response.data)}`);
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error(`❌ No response received from server: ${error.request}`);
+      } else {
+        // Something happened in setting up the request
+        console.error(`❌ Error setting up request: ${error.message}`);
+      }
       return null;
     }
   }
@@ -366,55 +385,82 @@ class ComfyUIClient {
    * @returns {Promise<Array|null>} Array of output files or null if retrieval failed
    */
   async getOutputFiles(promptId) {
-    const result = await this.checkWorkflowStatus(promptId);
-    
-    if (result.status !== 'completed' || !result.outputs) {
-      return null;
-    }
-    
-    const outputs = result.outputs;
-    const outputFiles = [];
-    
-    // Process all output nodes
-    for (const nodeId in outputs) {
-      const node = outputs[nodeId];
+    try {
+      // Get the history
+      const history = await this.getHistory(promptId);
       
-      // Process images in this node
-      if (node.images) {
-        for (const image of node.images) {
-          const originalUrl = `${this.originalServerUrl}/view?filename=${encodeURIComponent(image.filename)}&type=output${image.subfolder ? `&subfolder=${encodeURIComponent(image.subfolder)}` : ''}`;
-          outputFiles.push({
-            type: 'image',
-            node_id: nodeId,
-            filename: image.filename,
-            subfolder: image.subfolder || '',
-            url: originalUrl
-          });
+      if (!history) {
+        console.error('No history found for prompt ID:', promptId);
+        return null;
+      }
+      
+      // Direct access or via the prompt ID
+      const promptData = history[promptId] || history;
+      
+      // Check if we have outputs
+      if (!promptData.outputs) {
+        console.error('No outputs found in history');
+        return null;
+      }
+      
+      const outputs = promptData.outputs;
+      const outputFiles = [];
+      
+      // Process all output nodes
+      for (const nodeId in outputs) {
+        const node = outputs[nodeId];
+        
+        // Process images in this node
+        if (node.images) {
+          for (const image of node.images) {
+            // Create the correct URL
+            let imageUrl = `${this.originalServerUrl}/view?filename=${encodeURIComponent(image.filename)}`;
+            if (image.type) {
+              imageUrl += `&type=${encodeURIComponent(image.type)}`;
+            }
+            if (image.subfolder) {
+              imageUrl += `&subfolder=${encodeURIComponent(image.subfolder)}`;
+            }
+            
+            outputFiles.push({
+              type: 'image',
+              node_id: nodeId,
+              filename: image.filename,
+              subfolder: image.subfolder || '',
+              url: imageUrl
+            });
+            
+            console.log(`Found image: ${image.filename}`);
+          }
+        }
+        
+        // Process videos in this node
+        if (node.videos) {
+          for (const video of node.videos) {
+            const videoUrl = `${this.originalServerUrl}/view?filename=${encodeURIComponent(video.filename)}&type=output${video.subfolder ? `&subfolder=${encodeURIComponent(video.subfolder)}` : ''}`;
+            outputFiles.push({
+              type: 'video',
+              node_id: nodeId,
+              filename: video.filename,
+              subfolder: video.subfolder || '',
+              url: videoUrl
+            });
+          }
         }
       }
       
-      // Process videos in this node
-      if (node.videos) {
-        for (const video of node.videos) {
-          const originalUrl = `${this.originalServerUrl}/view?filename=${encodeURIComponent(video.filename)}&type=output${video.subfolder ? `&subfolder=${encodeURIComponent(video.subfolder)}` : ''}`;
-          outputFiles.push({
-            type: 'video',
-            node_id: nodeId,
-            filename: video.filename,
-            subfolder: video.subfolder || '',
-            url: originalUrl
-          });
-        }
+      console.log(`Found ${outputFiles.length} output files`);
+      
+      if (outputFiles.length === 0) {
+        console.warn('No output files found');
+        return null;
       }
-    }
-    
-    if (outputFiles.length === 0) {
-      console.warn('⚠️ No output files found in completed workflow');
+      
+      return outputFiles;
+    } catch (error) {
+      console.error('Error getting output files:', error);
       return null;
     }
-    
-    console.log(`🔍 Found ${outputFiles.length} output files`);
-    return outputFiles;
   }
   
   /**
@@ -423,10 +469,18 @@ class ComfyUIClient {
    * @returns {Promise<string|null>} Blob URL to the downloaded file or null if download failed
    */
   async downloadFile(url) {
+    if (!url) {
+      console.error('Download failed: URL is undefined or null');
+      return null;
+    }
+    
     // Replace the original URL with the proxied URL
+    console.log('Original URL:', url);
     const proxiedUrl = url.replace(this.originalServerUrl, this.serverUrl);
+    console.log('Proxied URL:', proxiedUrl);
     
     try {
+      console.log('Attempting to download file from:', proxiedUrl);
       const response = await axios.get(proxiedUrl, {
         headers: this._getHeaders(),
         responseType: 'blob'
@@ -437,14 +491,27 @@ class ComfyUIClient {
         const blob = new Blob([response.data], { type: response.headers['content-type'] });
         const blobUrl = URL.createObjectURL(blob);
         
-        console.log(`✅ File downloaded successfully`);
+        console.log('File downloaded successfully, blob URL created');
         return blobUrl;
       } else {
-        console.error(`❌ Download failed: ${response.status}`);
+        console.error(`Download failed: ${response.status} - ${response.statusText}`);
         return null;
       }
     } catch (error) {
-      console.error(`❌ Exception during download: ${error.message}`);
+      console.error('Exception during download:');
+      if (error.response) {
+        console.error('Response error:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          headers: error.response.headers,
+          data: error.response.data
+        });
+      } else if (error.request) {
+        console.error('Request error (no response received):', error.request);
+      } else {
+        console.error('Error details:', error.message);
+      }
+      console.error('Full error:', error);
       return null;
     }
   }

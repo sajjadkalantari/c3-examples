@@ -10,6 +10,20 @@ const useAvatarGenerator = () => {
   const [result, setResult] = useState(null);
   const [status, setStatus] = useState('idle'); // idle, checking, uploading, processing, completed, error
 
+  // Convert a Blob to Base64
+  const blobToBase64 = async (blob) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        // Get the data part after the comma
+        const base64String = reader.result.split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const generateAvatar = useCallback(async (portraitImage, audioFile, workflowJson, apiKey) => {
     if (!apiKey) {
       setError('API key is required');
@@ -49,16 +63,20 @@ const useAvatarGenerator = () => {
         
         setProgress(20);
         
-        // Upload audio
-        const audioName = await comfyClient.uploadFile(audioFile, 'input');
-        if (!audioName) {
-          throw new Error('Failed to upload audio');
+        // Upload audio if provided
+        let audioName = null;
+        if (audioFile) {
+          audioName = await comfyClient.uploadFile(audioFile, 'input');
+          if (!audioName) {
+            throw new Error('Failed to upload audio');
+          }
         }
         
         setProgress(30);
         
         // Step 5: Load and update workflow
         const workflow = await comfyClient.loadWorkflow(workflowJson);
+        console.log("workflow", workflow);
         
         // Update workflow with image and audio
         const updatedWorkflow = JSON.parse(JSON.stringify(workflow));
@@ -68,11 +86,11 @@ const useAvatarGenerator = () => {
           const node = updatedWorkflow[nodeId];
           if (node.class_type === 'LoadImage') {
             node.inputs.image = imageName;
-            console.log(`🖼️ Updated LoadImage node with image: ${imageName}`);
+            console.log(`Updated LoadImage node with image: ${imageName}`);
           }
-          if (node.class_type === 'LoadAudio') {
+          if (node.class_type === 'LoadAudio' && audioName) {
             node.inputs.audio = audioName;
-            console.log(`🔊 Updated LoadAudio node with audio: ${audioName}`);
+            console.log(`Updated LoadAudio node with audio: ${audioName}`);
           }
         }
         
@@ -85,19 +103,21 @@ const useAvatarGenerator = () => {
           throw new Error('Failed to queue workflow');
         }
         
+        console.log("Workflow queued with ID:", promptId);
         setProgress(50);
         setStatus('processing');
         
         // Step 7: Wait for workflow to complete with progress updates
         const progressCallback = (result) => {
           if (result.status === 'processing') {
-            // Calculate progress (adjust as needed based on expected node count)
-            // This is a rough estimation that assumes the total progress from 50% to 90%
+            // Calculate progress
             const processingProgress = Math.min(40, 40 * (result.completedNodeCount / result.expectedNodeCount || 0.5));
             setProgress(50 + processingProgress);
           }
         };
         
+        // Wait for completion
+        console.log("Waiting for workflow completion...");
         const completed = await comfyClient.waitForWorkflowCompletion(
           promptId, 
           config.DEFAULT_TIMEOUT_MINUTES,
@@ -109,11 +129,13 @@ const useAvatarGenerator = () => {
         }
         
         setProgress(90);
+        console.log("Workflow completed, getting output files...");
         
         // Step 8: Get output files
         const outputFiles = await comfyClient.getOutputFiles(promptId);
+        console.log("Output files:", JSON.stringify(outputFiles, null, 2));
         
-        if (!outputFiles) {
+        if (!outputFiles || outputFiles.length === 0) {
           throw new Error('No output files found');
         }
         
@@ -126,6 +148,7 @@ const useAvatarGenerator = () => {
         if (videos.length > 0) {
           // Get the most recent video
           const latestVideo = videos[videos.length - 1];
+          console.log("Downloading video:", JSON.stringify(latestVideo, null, 2));
           resultUrl = await comfyClient.downloadFile(latestVideo.url);
           resultType = 'video';
         }
@@ -135,32 +158,64 @@ const useAvatarGenerator = () => {
           if (images.length === 0) {
             throw new Error('No video or image found in output');
           }
+          
           // Get the most recent image
           const latestImage = images[images.length - 1];
+          console.log("Downloading image object:", JSON.stringify(latestImage, null, 2));
+          
+          if (!latestImage.url) {
+            throw new Error(`Image has no URL: ${JSON.stringify(latestImage)}`);
+          }
+          
+          console.log("Downloading image from URL:", latestImage.url);
           resultUrl = await comfyClient.downloadFile(latestImage.url);
+          
+          if (!resultUrl) {
+            throw new Error('Failed to download image, got null URL');
+          }
         }
         
         if (!resultUrl) {
           throw new Error('Failed to download result');
         }
         
-        setResult({
-          videoUrl: resultUrl,
-          type: resultType
-        });
+        try {
+          // Convert blobUrl to base64 for display
+          console.log("Converting blob URL to base64:", resultUrl);
+          const response = await fetch(resultUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch blob: ${response.status} ${response.statusText}`);
+          }
+          
+          const blob = await response.blob();
+          console.log("Blob received:", blob.type, blob.size, "bytes");
+          
+          const base64Data = await blobToBase64(blob);
+          console.log("Base64 conversion successful, length:", base64Data?.length || 0);
+          
+          setResult({
+            videoUrl: base64Data,
+            type: resultType
+          });
+          
+          setProgress(100);
+          setStatus('completed');
+          return base64Data;
+        } catch (conversionError) {
+          console.error("Error converting to base64:", conversionError);
+          throw new Error(`Error processing the result: ${conversionError.message}`);
+        }
         
-        setProgress(100);
-        setStatus('completed');
-        return resultUrl;
-        
-      } catch (uploadError) {
-        console.error('Error during file upload or processing:', uploadError);
-        throw new Error(`CORS Error or processing error: Make sure the CORS proxy is running. Start the app with 'npm run dev' instead of 'npm start'. (${uploadError.message})`);
+      } catch (processError) {
+        console.error('Error during processing:', processError);
+        const errorMessage = processError.message || 'Unknown processing error';
+        throw new Error(`Processing error: ${errorMessage}`);
       }
       
     } catch (error) {
       console.error('Error generating avatar:', error);
-      setError(error.message || 'Unknown error occurred');
+      const errorMessage = error.message || 'Unknown error occurred';
+      setError(errorMessage);
       setStatus('error');
       return null;
     } finally {

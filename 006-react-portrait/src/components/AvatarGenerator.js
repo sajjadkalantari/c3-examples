@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import useAvatarGenerator from '../hooks/useAvatarGenerator';
+import { loadWorkflow } from '../utils/loadWorkflow';
 
 const AvatarGenerator = ({ apiKey }) => {
   const [portraitImage, setPortraitImage] = useState(null);
@@ -9,6 +10,9 @@ const AvatarGenerator = ({ apiKey }) => {
   const [audioFile, setAudioFile] = useState(null);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState(null);
   const [isAudioUploaded, setIsAudioUploaded] = useState(false);
+  
+  const [useAdvancedWorkflow, setUseAdvancedWorkflow] = useState(true);
+  const [debugInfo, setDebugInfo] = useState('');
   
   const {
     generateAvatar,
@@ -21,36 +25,6 @@ const AvatarGenerator = ({ apiKey }) => {
   
   const fileInputRef = useRef(null);
   const audioInputRef = useRef(null);
-  
-  // Super basic workflow JSON object with only core ComfyUI nodes
-  const workflowJson = {
-    "1": {
-      "class_type": "LoadImage",
-      "inputs": {
-        "image": "",
-        "upload": "image"
-      }
-    },
-    "2": {
-      "class_type": "ImageScale",
-      "inputs": {
-        "image": ["1", 0],
-        "width": 576,
-        "height": 576,
-        "upscale_method": "lanczos",
-        "crop": "disabled"
-      }
-    },
-    "3": {
-      "class_type": "SaveImage",
-      "inputs": {
-        "images": ["2", 0],
-        "filename_prefix": "portrait_",
-        "jpeg_quality": 95,
-        "overwrite_mode": "overwrite"
-      }
-    }
-  };
 
   const handlePortraitChange = (e) => {
     const file = e.target.files[0];
@@ -80,22 +54,29 @@ const AvatarGenerator = ({ apiKey }) => {
       return;
     }
     
-    // Since we're only processing images for now, audio is optional
-    // if (!audioFile) {
-    //   alert('Please upload an audio file');
-    //   return;
-    // }
+    if (useAdvancedWorkflow && !audioFile) {
+      alert('Please upload an audio file for the advanced workflow');
+      return;
+    }
     
     if (!apiKey) {
       alert('Please enter your API key');
       return;
     }
     
+    setDebugInfo('Processing started...');
+    
     try {
-      // For now, we're just passing the image
-      await generateAvatar(portraitImage, audioFile, workflowJson, apiKey);
+      // Load the appropriate workflow
+      const workflow = loadWorkflow(useAdvancedWorkflow);
+      setDebugInfo(prev => prev + `\nUsing ${useAdvancedWorkflow ? 'advanced' : 'simple'} workflow`);
+      
+      // Generate the avatar
+      const result = await generateAvatar(portraitImage, audioFile, workflow, apiKey);
+      setDebugInfo(prev => prev + '\nProcessing completed successfully.');
     } catch (error) {
       console.error('Error generating avatar:', error);
+      setDebugInfo(prev => prev + '\nError: ' + error.message);
     }
   };
 
@@ -106,13 +87,21 @@ const AvatarGenerator = ({ apiKey }) => {
     setAudioFile(null);
     setAudioPreviewUrl(null);
     setIsAudioUploaded(false);
+    setDebugInfo('');
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (audioInputRef.current) audioInputRef.current.value = '';
   };
 
+  // Calculate the actual progress to show
+  const displayProgress = loading ? progress : 0;
+
+  // Determine if we should show the result
+  const showResult = result && result.videoUrl;
+
   return (
     <div className="portrait-generator">
-      <h2>ComfyUI Image Processor</h2>
+      <h2>ComfyUI Animation Generator</h2>
+      
       <form onSubmit={onSubmit}>
         <div className="upload-section">
           <h3>Upload Your Image</h3>
@@ -132,7 +121,7 @@ const AvatarGenerator = ({ apiKey }) => {
         </div>
 
         <div className="upload-section">
-          <h3>Upload Audio (Optional)</h3>
+          <h3>Upload Audio {!useAdvancedWorkflow && "(Optional)"}</h3>
           <input
             type="file"
             onChange={handleAudioChange}
@@ -148,16 +137,28 @@ const AvatarGenerator = ({ apiKey }) => {
           )}
         </div>
         
+        <div className="workflow-toggle">
+          <label>
+            <input
+              type="checkbox"
+              checked={useAdvancedWorkflow}
+              onChange={e => setUseAdvancedWorkflow(e.target.checked)}
+              disabled={loading}
+            />
+            Use Advanced Workflow (requires audio)
+          </label>
+        </div>
+        
         <div className="action-buttons">
           <button 
             type="submit" 
-            disabled={!isPortraitUploaded || loading || !apiKey}
+            disabled={!isPortraitUploaded || (useAdvancedWorkflow && !isAudioUploaded) || loading || !apiKey}
             className="generate-btn"
           >
-            Process Image
+            {useAdvancedWorkflow ? "Generate Animation" : "Process Image"}
           </button>
           
-          {(isPortraitUploaded || isAudioUploaded || result) && (
+          {(isPortraitUploaded || isAudioUploaded || showResult) && (
             <button 
               type="button" 
               onClick={resetForm} 
@@ -172,27 +173,27 @@ const AvatarGenerator = ({ apiKey }) => {
       
       {loading && (
         <div className="processing">
-          <h3>Processing Your Image</h3>
+          <h3>Processing Your {useAdvancedWorkflow ? "Animation" : "Image"}</h3>
           <div className="progress-bar">
             <div 
               className="progress" 
-              style={{ width: `${progress}%` }}
+              style={{ width: `${displayProgress}%` }}
             ></div>
           </div>
-          <p>{status}</p>
+          <p className="status-message">{status}</p>
         </div>
       )}
       
       {error && (
         <div className="error">
           <h3>Error</h3>
-          <p>{error}</p>
+          <p>{typeof error === 'object' ? JSON.stringify(error, null, 2) : error}</p>
         </div>
       )}
       
-      {result && (
+      {showResult && (
         <div className="result">
-          <h3>Your Processed Image</h3>
+          <h3>Your {result.type === 'video' ? 'Animation' : 'Processed Image'}</h3>
           <div className="result-image">
             {result.type === 'video' ? (
               <video 
@@ -200,22 +201,32 @@ const AvatarGenerator = ({ apiKey }) => {
                 autoPlay
                 loop
                 src={`data:video/mp4;base64,${result.videoUrl}`} 
-                alt="Generated video" 
               />
             ) : (
               <img 
-                src={`data:image/jpeg;base64,${result.videoUrl}`} 
+                src={`data:image/png;base64,${result.videoUrl}`} 
                 alt="Processed image" 
               />
             )}
           </div>
-          <a 
-            href={`data:${result.type === 'video' ? 'video/mp4' : 'image/jpeg'};base64,${result.videoUrl}`} 
-            download={result.type === 'video' ? "processed_video.mp4" : "processed_image.jpg"}
-            className="download-btn"
-          >
-            Download
-          </a>
+          <div className="download-container">
+            <a 
+              href={`data:${result.type === 'video' ? 'video/mp4' : 'image/png'};base64,${result.videoUrl}`} 
+              download={result.type === 'video' ? "animation.mp4" : "processed_image.png"}
+              className="download-btn"
+            >
+              Download
+            </a>
+          </div>
+        </div>
+      )}
+      
+      {debugInfo && (
+        <div className="debug-info">
+          <h3>Debug Information</h3>
+          <pre>{debugInfo}</pre>
+          <p>Current status: {status}</p>
+          <p>Progress: {progress}%</p>
         </div>
       )}
     </div>
