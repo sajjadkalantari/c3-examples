@@ -1,0 +1,114 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "",
+      "upload": "image"
+    }
+  },
+  "2": {
+    "class_type": "Image Resize",
+    "inputs": {
+      "image": ["1", 0],
+      "width": 576,
+      "height": 576,
+      "crop": "disabled",
+      "upscale_method": "bicubic",
+      "downscale_method": "bicubic"
+    }
+  },
+  "3": {
+    "class_type": "FaceAnalysis",
+    "inputs": {
+      "image": ["2", 0]
+    }
+  },
+  "4": {
+    "class_type": "FacialExpressionSwap",
+    "inputs": {
+      "reference_image": ["2", 0],
+      "source_image": ["2", 0]
+    }
+  },
+  "5": {
+    "class_type": "VHS_LoadAudio",
+    "inputs": {
+      "audio_file": "input/audio.mp3"
+    }
+  },
+  "6": {
+    "class_type": "SONIC_PreData",
+    "inputs": {
+      "target_face": ["3", 0],
+      "source_video": ["4", 0],
+      "audio": ["5", 0],
+      "original_fps": 25,
+      "target_fps": 25,
+      "enhance": "on",
+      "quad_sub": "on"
+    }
+  },
+  "7": {
+    "class_type": "SONIC_AnimateAnyone",
+    "inputs": {
+      "pre_data": ["6", 0],
+      "kps": ["6", 1],
+      "still_mode": "off",
+      "motion_adj": 3
+    }
+  },
+  "8": {
+    "class_type": "SONIC_FaceFusion",
+    "inputs": {
+      "target_face": ["3", 0],
+      "source_video": ["7", 0],
+      "audio": ["5", 0],
+      "model_name": "model_0",
+      "blend_faces": "on",
+      "face_scale": 1.0
+    }
+  },
+  "9": {
+    "class_type": "SONIC_AudioVocalExtractor",
+    "inputs": {
+      "audio": ["5", 0]
+    }
+  },
+  "10": {
+    "class_type": "SONIC_AudioTalkingHead",
+    "inputs": {
+      "source_video": ["8", 0],
+      "audio_vocals": ["9", 0],
+      "audio_vocals_weight": 1.0,
+      "crop_first_frame": "off",
+      "sync_start": "on",
+      "sync_length": "on",
+      "vocoder_profiler_level": 0
+    }
+  },
+  "11": {
+    "class_type": "CLIPSeg",
+    "inputs": {
+      "image": ["10", 0],
+      "prompt": "person, face"
+    }
+  },
+  "12": {
+    "class_type": "VideoUpscaleWithModel",
+    "inputs": {
+      "video": ["10", 0],
+      "upscale_model": "4x_NMKD-Superscale-SP_178000_G",
+      "rescale_factor": 1.5,
+      "keep_fps": true
+    }
+  },
+  "13": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "video_1": ["12", 0],
+      "video_2": ["12", 0],
+      "transition": "none",
+      "transition_factor": 0
+    }
+  }
+} 
