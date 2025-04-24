@@ -20,7 +20,8 @@ const AvatarGenerator = ({ apiKey }) => {
     error,
     progress,
     result,
-    status
+    status,
+    debugInfo: hookDebugInfo
   } = useAvatarGenerator();
   
   const fileInputRef = useRef(null);
@@ -196,26 +197,36 @@ const AvatarGenerator = ({ apiKey }) => {
           <h3>Your {result.type === 'video' ? 'Animation' : 'Processed Image'}</h3>
           <div className="result-image">
             {result.type === 'video' ? (
-              <video 
-                controls
-                autoPlay
-                loop
-                src={`data:video/mp4;base64,${result.videoUrl}`} 
-              />
+              result.directLink ? (
+                <video 
+                  controls
+                  autoPlay
+                  loop
+                  src={result.videoUrl} 
+                />
+              ) : (
+                <video 
+                  controls
+                  autoPlay
+                  loop
+                  src={`data:video/mp4;base64,${result.videoUrl}`} 
+                />
+              )
             ) : (
               <img 
-                src={`data:image/png;base64,${result.videoUrl}`} 
+                src={result.directLink ? result.videoUrl : `data:image/png;base64,${result.videoUrl}`} 
                 alt="Processed image" 
               />
             )}
           </div>
           <div className="download-container">
             <a 
-              href={`data:${result.type === 'video' ? 'video/mp4' : 'image/png'};base64,${result.videoUrl}`} 
+              href={result.directLink ? result.videoUrl : `data:${result.type === 'video' ? 'video/mp4' : 'image/png'};base64,${result.videoUrl}`} 
               download={result.type === 'video' ? "animation.mp4" : "processed_image.png"}
               className="download-btn"
+              target={result.directLink ? "_blank" : "_self"}
             >
-              Download
+              {result.directLink ? "Open in New Tab" : "Download"}
             </a>
           </div>
         </div>
@@ -227,6 +238,12 @@ const AvatarGenerator = ({ apiKey }) => {
           <pre>{debugInfo}</pre>
           <p>Current status: {status}</p>
           <p>Progress: {progress}%</p>
+          {hookDebugInfo && (
+            <div className="hook-debug">
+              <h4>Processing Details:</h4>
+              <pre>{hookDebugInfo}</pre>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -335,48 +335,140 @@ class ComfyUIClient {
   /**
    * Check the status of a workflow execution
    * @param {string} promptId - Prompt ID
-   * @returns {Promise<{ status: string, outputs: Object|null }>} Status and outputs
+   * @returns {Promise<{ status: string, outputs: Object|null, completedNodeCount: number, expectedNodeCount: number }>} Status and outputs
    */
   async checkWorkflowStatus(promptId) {
-    const history = await this.getHistory(promptId);
-    
-    if (!history) {
-      return { status: 'error', outputs: null };
-    }
-    
-    // Check if the history contains the prompt
-    if (!history[promptId]) {
-      return { status: 'pending', outputs: null };
-    }
-    
-    const prompt = history[promptId];
-    
-    // Check for errors in the nodes
-    const nodes = prompt.outputs || {};
-    const nodeIds = Object.keys(nodes);
-    
-    for (const nodeId of nodeIds) {
-      const node = nodes[nodeId];
+    try {
+      const history = await this.getHistory(promptId);
       
-      if (node.error) {
-        console.error(`❌ Error in node ${nodeId}: ${node.error}`);
-        return { status: 'error', outputs: null };
+      if (!history) {
+        return { status: 'error', outputs: null, completedNodeCount: 0, expectedNodeCount: 0 };
       }
+      
+      // Check if the history contains the prompt
+      const promptData = history[promptId] || history;
+      
+      if (!promptData) {
+        return { status: 'pending', outputs: null, completedNodeCount: 0, expectedNodeCount: 0 };
+      }
+      
+      // Check prompt status from status field
+      if (promptData.status && promptData.status.status_str === 'error') {
+        console.error(`❌ Error in workflow execution: ${JSON.stringify(promptData.status)}`);
+        return { status: 'error', outputs: null, completedNodeCount: 0, expectedNodeCount: 0 };
+      }
+      
+      if (promptData.status && promptData.status.completed) {
+        console.log(`✅ Workflow marked as completed in status field`);
+        return { 
+          status: 'completed', 
+          outputs: promptData.outputs || {}, 
+          completedNodeCount: Object.keys(promptData.outputs || {}).length,
+          expectedNodeCount: Object.keys(promptData.prompt || {}).length
+        };
+      }
+      
+      // Check if the workflow is still in the queue
+      try {
+        const queueResponse = await axios.get(
+          `${this.serverUrl}/queue`,
+          { headers: this._getHeaders() }
+        );
+        
+        if (queueResponse.status === 200) {
+          const queueData = queueResponse.data;
+          
+          // Check if our prompt is in the queue
+          const runningPrompts = (queueData.queue_running || []).map(item => item.prompt_id);
+          const pendingPrompts = (queueData.queue_pending || []).map(item => item.prompt_id);
+          
+          if (runningPrompts.includes(promptId)) {
+            console.log(`⏳ Workflow is currently running...`);
+            return { 
+              status: 'processing', 
+              outputs: null,
+              completedNodeCount: 0,
+              expectedNodeCount: Object.keys(promptData.prompt || {}).length,
+            };
+          }
+          
+          if (pendingPrompts.includes(promptId)) {
+            console.log(`⏳ Workflow is pending in queue...`);
+            return { 
+              status: 'pending', 
+              outputs: null,
+              completedNodeCount: 0,
+              expectedNodeCount: Object.keys(promptData.prompt || {}).length,
+            };
+          }
+          
+          // If we have outputs and we're not in any queue, consider it complete
+          if (promptData.outputs && Object.keys(promptData.outputs).length > 0) {
+            console.log('✅ Workflow has outputs and is not in queue, considering complete');
+            return { 
+              status: 'completed', 
+              outputs: promptData.outputs,
+              completedNodeCount: Object.keys(promptData.outputs).length,
+              expectedNodeCount: Object.keys(promptData.prompt || {}).length,
+            };
+          }
+        }
+      } catch (error) {
+        console.warn(`⚠️ Error checking queue status: ${error.message}`);
+        // Continue with other checks even if queue check fails
+      }
+      
+      // Check for errors in the nodes
+      const nodes = promptData.outputs || {};
+      const nodeIds = Object.keys(nodes);
+      
+      for (const nodeId of nodeIds) {
+        const node = nodes[nodeId];
+        
+        if (node.error) {
+          console.error(`❌ Error in node ${nodeId}: ${node.error}`);
+          return { 
+            status: 'error', 
+            outputs: null,
+            completedNodeCount: nodeIds.length,
+            expectedNodeCount: Object.keys(promptData.prompt || {}).length,
+          };
+        }
+      }
+      
+      // Check if all nodes have completed (fallback to old method)
+      const expectedNodeCount = Object.keys(promptData.prompt || {}).length;
+      const completedNodeCount = nodeIds.length;
+      
+      // If we have at least some nodes completed but not all, it's in progress
+      if (completedNodeCount > 0 && completedNodeCount < expectedNodeCount) {
+        const progress = Math.round((completedNodeCount / expectedNodeCount) * 100);
+        console.log(`⏳ Workflow in progress: ${progress}% (${completedNodeCount}/${expectedNodeCount} nodes)`);
+        return { 
+          status: 'processing', 
+          outputs: null,
+          completedNodeCount: completedNodeCount,
+          expectedNodeCount: expectedNodeCount,
+        };
+      }
+      
+      // Execution is still in progress with no completed nodes
+      console.log(`⏳ Workflow execution in progress: No completed nodes yet`);
+      return { 
+        status: 'processing', 
+        outputs: null,
+        completedNodeCount: 0,
+        expectedNodeCount: expectedNodeCount,
+      };
+    } catch (error) {
+      console.error(`❌ Error checking workflow status: ${error.message}`);
+      return { 
+        status: 'error', 
+        outputs: null,
+        completedNodeCount: 0,
+        expectedNodeCount: 0,
+      };
     }
-    
-    // Check if all nodes have completed
-    const expectedNodeCount = Object.keys(prompt.prompt).length;
-    const completedNodeCount = nodeIds.length;
-    
-    if (completedNodeCount < expectedNodeCount) {
-      const progress = Math.round((completedNodeCount / expectedNodeCount) * 100);
-      console.log(`⏳ Workflow in progress: ${progress}% (${completedNodeCount}/${expectedNodeCount} nodes)`);
-      return { status: 'processing', outputs: null };
-    }
-    
-    // Workflow completed successfully
-    console.log(`✅ Workflow completed successfully`);
-    return { status: 'completed', outputs: nodes };
   }
   
   /**
@@ -434,7 +526,7 @@ class ComfyUIClient {
           }
         }
         
-        // Process videos in this node
+        // Process videos in this node (both videos and gifs arrays)
         if (node.videos) {
           for (const video of node.videos) {
             const videoUrl = `${this.originalServerUrl}/view?filename=${encodeURIComponent(video.filename)}&type=output${video.subfolder ? `&subfolder=${encodeURIComponent(video.subfolder)}` : ''}`;
@@ -445,6 +537,22 @@ class ComfyUIClient {
               subfolder: video.subfolder || '',
               url: videoUrl
             });
+            console.log(`Found video: ${video.filename}`);
+          }
+        }
+        
+        // Process gifs in this node (ComfyUI often puts videos in the gifs array)
+        if (node.gifs) {
+          for (const video of node.gifs) {
+            const videoUrl = `${this.originalServerUrl}/view?filename=${encodeURIComponent(video.filename)}&type=output${video.subfolder ? `&subfolder=${encodeURIComponent(video.subfolder)}` : ''}`;
+            outputFiles.push({
+              type: 'video',
+              node_id: nodeId,
+              filename: video.filename,
+              subfolder: video.subfolder || '',
+              url: videoUrl
+            });
+            console.log(`Found video (from gifs array): ${video.filename}`);
           }
         }
       }
@@ -531,18 +639,51 @@ class ComfyUIClient {
     // Wait for initial server processing time
     await new Promise(resolve => setTimeout(resolve, config.INITIAL_WAIT_SECONDS * 1000));
     
+    // Keep track of how many times we've checked and how many successful checks we've had
+    let checkCount = 0;
+    let successCount = 0;
+    
     while (Date.now() - startTime < timeoutMs) {
+      checkCount++;
       const result = await this.checkWorkflowStatus(promptId);
       
       if (progressCallback) {
-        progressCallback(result);
+        progressCallback({
+          ...result,
+          checkCount,
+          elapsedTime: Math.round((Date.now() - startTime) / 1000)
+        });
       }
       
       if (result.status === 'completed') {
-        return true;
-      } else if (result.status === 'error') {
+        // Sometimes the API can mistakenly report completion,
+        // so we'll wait for a few consecutive successful checks
+        successCount++;
+        
+        if (successCount >= 2) {
+          console.log(`✅ Workflow completion confirmed after ${checkCount} checks`);
+          return true;
+        }
+        
+        // Wait a short time before checking again to confirm completion
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      } else {
+        // Reset success count if we get a non-completed status
+        successCount = 0;
+      }
+      
+      if (result.status === 'error') {
+        console.error('❌ Workflow execution failed with error');
         return false;
       }
+      
+      // Calculate progress based on completed nodes
+      const progress = result.completedNodeCount > 0 && result.expectedNodeCount > 0
+        ? Math.min(95, Math.floor((result.completedNodeCount / result.expectedNodeCount) * 100))
+        : Math.min(40, Math.floor(((Date.now() - startTime) / timeoutMs) * 100));
+      
+      console.log(`⏳ Workflow in progress... ${progress}% (Check ${checkCount})`);
       
       // Wait before checking again
       await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
