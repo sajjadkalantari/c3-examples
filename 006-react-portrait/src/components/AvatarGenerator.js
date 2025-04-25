@@ -100,61 +100,69 @@ const AvatarGenerator = ({ apiKey }) => {
   const showResult = result && result.videoUrl;
 
   return (
-    <div className="portrait-generator">
-      <h2>ComfyUI Animation Generator</h2>
+    <div className="mt-6">
+      <h2 className="text-2xl font-semibold text-gray-800 mb-5">ComfyUI Animation Generator</h2>
       
       <form onSubmit={onSubmit}>
-        <div className="upload-section">
-          <h3>Upload Your Image</h3>
+        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+          <h3 className="text-lg font-medium text-gray-700 mb-3">Upload Your Image</h3>
           <input
             type="file"
             onChange={handlePortraitChange}
             accept="image/*"
             ref={fileInputRef}
             disabled={loading}
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4
+            file:rounded-md file:border-0 file:text-sm file:font-semibold
+            file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
           />
           
           {portraitPreviewUrl && (
-            <div className="preview">
-              <img src={portraitPreviewUrl} alt="Image preview" />
+            <div className="mt-4 text-center">
+              <img src={portraitPreviewUrl} alt="Image preview" className="max-h-[300px] mx-auto rounded" />
             </div>
           )}
         </div>
 
-        <div className="upload-section">
-          <h3>Upload Audio {!useAdvancedWorkflow && "(Optional)"}</h3>
+        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+          <h3 className="text-lg font-medium text-gray-700 mb-3">Upload Audio {!useAdvancedWorkflow && "(Optional)"}</h3>
           <input
             type="file"
             onChange={handleAudioChange}
             accept="audio/*"
             ref={audioInputRef}
             disabled={loading}
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4
+            file:rounded-md file:border-0 file:text-sm file:font-semibold
+            file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
           />
           
           {audioPreviewUrl && (
-            <div className="preview">
-              <audio controls src={audioPreviewUrl} />
+            <div className="mt-4 text-center">
+              <audio controls src={audioPreviewUrl} className="w-full" />
             </div>
           )}
         </div>
         
-        <div className="workflow-toggle">
-          <label>
+        <div className="mb-6 flex items-center">
+          <label className="inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
               checked={useAdvancedWorkflow}
               onChange={e => setUseAdvancedWorkflow(e.target.checked)}
               disabled={loading}
+              className="sr-only peer"
             />
-            Use Advanced Workflow (requires audio)
+            <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            <span className="ms-3 text-sm font-medium text-gray-700">Use Advanced Workflow (requires audio)</span>
           </label>
         </div>
         
-        <div className="action-buttons">
+        <div className="flex gap-3 mb-8">
           <button 
             type="submit" 
             disabled={!isPortraitUploaded || (useAdvancedWorkflow && !isAudioUploaded) || loading || !apiKey}
-            className="generate-btn"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             {useAdvancedWorkflow ? "Generate Animation" : "Process Image"}
           </button>
@@ -164,7 +172,7 @@ const AvatarGenerator = ({ apiKey }) => {
               type="button" 
               onClick={resetForm} 
               disabled={loading}
-              className="reset-btn"
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               Reset
             </button>
@@ -173,29 +181,29 @@ const AvatarGenerator = ({ apiKey }) => {
       </form>
       
       {loading && (
-        <div className="processing">
-          <h3>Processing Your {useAdvancedWorkflow ? "Animation" : "Image"}</h3>
-          <div className="progress-bar">
+        <div className="bg-blue-50 rounded-lg p-4 mb-6">
+          <h3 className="text-lg font-medium text-gray-700 mb-3">Processing Your {useAdvancedWorkflow ? "Animation" : "Image"}</h3>
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
             <div 
-              className="progress" 
+              className="bg-blue-600 h-2.5 rounded-full" 
               style={{ width: `${displayProgress}%` }}
             ></div>
           </div>
-          <p className="status-message">{status}</p>
+          <p className="text-sm text-gray-600">{status}</p>
         </div>
       )}
       
       {error && (
-        <div className="error">
-          <h3>Error</h3>
+        <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-6">
+          <h3 className="text-lg font-medium mb-2">Error</h3>
           <p>{typeof error === 'object' ? JSON.stringify(error, null, 2) : error}</p>
         </div>
       )}
       
       {showResult && (
-        <div className="result">
-          <h3>Your {result.type === 'video' ? 'Animation' : 'Processed Image'}</h3>
-          <div className="result-image">
+        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+          <h3 className="text-lg font-medium text-gray-700 mb-3">Your {result.type === 'video' ? 'Animation' : 'Processed Image'}</h3>
+          <div className="flex justify-center">
             {result.type === 'video' ? (
               result.directLink ? (
                 <video 
@@ -219,31 +227,33 @@ const AvatarGenerator = ({ apiKey }) => {
               />
             )}
           </div>
-          <div className="download-container">
-            <a 
-              href={result.directLink ? result.videoUrl : `data:${result.type === 'video' ? 'video/mp4' : 'image/png'};base64,${result.videoUrl}`} 
-              download={result.type === 'video' ? "animation.mp4" : "processed_image.png"}
-              className="download-btn"
-              target={result.directLink ? "_blank" : "_self"}
-            >
-              {result.directLink ? "Open in New Tab" : "Download"}
-            </a>
-          </div>
+          
+          {result.downloadUrl && (
+            <div className="flex justify-center mt-4">
+              <a 
+                href={result.downloadUrl} 
+                download
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors inline-flex items-center"
+              >
+                Download {result.type === 'video' ? 'Video' : 'Image'}
+              </a>
+            </div>
+          )}
         </div>
       )}
       
-      {debugInfo && (
-        <div className="debug-info">
-          <h3>Debug Information</h3>
-          <pre>{debugInfo}</pre>
-          <p>Current status: {status}</p>
-          <p>Progress: {progress}%</p>
-          {hookDebugInfo && (
-            <div className="hook-debug">
-              <h4>Processing Details:</h4>
-              <pre>{hookDebugInfo}</pre>
-            </div>
-          )}
+      {(debugInfo || hookDebugInfo) && (
+        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+          <h3 className="text-lg font-medium text-gray-700 mb-3">Debug Information</h3>
+          <pre className="bg-gray-100 p-3 rounded text-sm overflow-x-auto">
+            {debugInfo}
+            {hookDebugInfo && (
+              <>
+                {debugInfo && <hr className="my-2 border-gray-300" />}
+                {hookDebugInfo}
+              </>
+            )}
+          </pre>
         </div>
       )}
     </div>

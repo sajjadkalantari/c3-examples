@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Standard CSS styles */
 body {
   margin: 0;
@@ -11,6 +15,11 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* Custom component classes can be added here using @layer components */
+@layer components {
+  /* You can add custom component classes here if needed */
 }
 
 /* Manually add some basic Tailwind-like utility classes */

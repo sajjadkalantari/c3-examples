@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import './StoredApiKey.css';
 
 const StoredApiKey = ({ onChange }) => {
   const [apiKey, setApiKey] = useState('');
@@ -22,20 +21,20 @@ const StoredApiKey = ({ onChange }) => {
   };
 
   return (
-    <div className="api-key-container">
-      <label htmlFor="api-key" className="api-key-label">
+    <div className="mb-5 p-4 rounded-lg bg-gray-50 shadow-sm">
+      <label htmlFor="api-key" className="block mb-2 font-medium text-gray-700">
         C3 API Key:
       </label>
       <input
         id="api-key"
         type="password"
-        className="api-key-input"
+        className="w-full p-2.5 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
         value={apiKey}
         onChange={handleChange}
         placeholder="Enter your Comput3 API key"
       />
       {!apiKey && (
-        <p className="api-key-message">
+        <p className="mt-2 text-sm text-red-600">
           Please enter your API key to use the application
         </p>
       )}
