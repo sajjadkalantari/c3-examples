@@ -7,6 +7,7 @@ import LandingPage from './components/LandingPage';
 import Navbar from './components/Navbar';
 import BackButton from './components/BackButton';
 import CSMGenerator from './components/CSMGenerator';
+import WhisperTranscriber from './components/WhisperTranscriber';
 
 function App() {
   const [apiKey, setApiKey] = useState('');
@@ -46,12 +47,25 @@ function App() {
     </div>
   );
 
+  const WhisperPage = () => (
+    <div className="bg-gray-100 min-h-screen">
+      <Navbar />
+      <div className="max-w-7xl mx-auto px-4 py-5 pt-16">
+        <BackButton />
+        <main className="py-5">
+          <WhisperTranscriber />
+        </main>
+      </div>
+    </div>
+  );
+
   return (
     <Router>
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/portrait" element={<PortraitPage />} />
         <Route path="/csm" element={<CSMPage />} />
+        <Route path="/whisper" element={<WhisperPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
