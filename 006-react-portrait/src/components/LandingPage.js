@@ -67,6 +67,7 @@ const LandingPage = () => {
           {/* CSM Text-to-Speech Card */}
           <div 
             className="group bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-xl overflow-hidden shadow-lg border border-gray-700 transform transition duration-300 hover:scale-105 hover:shadow-2xl cursor-pointer"
+            onClick={() => navigate('/csm')}
           >
             <div className="h-48 bg-gradient-to-br from-purple-400 to-pink-600 flex items-center justify-center p-4 relative overflow-hidden">
               <div className="absolute inset-0 opacity-30">
