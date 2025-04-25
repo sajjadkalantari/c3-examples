@@ -22,6 +22,19 @@ code {
   /* You can add custom component classes here if needed */
 }
 
+/* Animation delay utilities */
+@layer utilities {
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+  .animation-delay-6000 {
+    animation-delay: 6s;
+  }
+}
+
 /* Manually add some basic Tailwind-like utility classes */
 .container {
   width: 100%;
