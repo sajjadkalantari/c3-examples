@@ -1,4 +1,5 @@
 import React from 'react';
+import { FaHeadphones, FaMicrophone, FaVideo } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import Navbar from './Navbar';
 
@@ -45,15 +46,7 @@ const LandingPage = () => {
               <div className="absolute inset-0 opacity-30">
                 <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern"></div>
               </div>
-              <img 
-                src="/avatar-example.png" 
-                alt="Portrait Generation" 
-                className="h-full object-contain relative z-10" 
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = "https://via.placeholder.com/300x200?text=AI+Portrait";
-                }}
-              />
+              <FaVideo className="w-32 h-32 text-white relative z-10" />
             </div>
             <div className="p-6">
               <h3 className="text-2xl font-bold mb-2 text-blue-400 group-hover:text-blue-300">Portrait Generation</h3>
@@ -79,9 +72,7 @@ const LandingPage = () => {
               <div className="absolute inset-0 opacity-30">
                 <div className="absolute top-0 left-0 w-full h-full bg-dots-pattern"></div>
               </div>
-              <svg className="w-32 h-32 text-white relative z-10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 18.75C15.3137 18.75 18 16.0637 18 12.75V11.25M12 18.75C8.68629 18.75 6 16.0637 6 12.75V11.25M12 18.75V22.5M8.25 22.5H15.75M12 15.75C10.3431 15.75 9 14.4069 9 12.75V4.5C9 2.84315 10.3431 1.5 12 1.5C13.6569 1.5 15 2.84315 15 4.5V12.75C15 14.4069 13.6569 15.75 12 15.75Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <FaMicrophone className="w-32 h-32 text-white relative z-10" />
             </div>
             <div className="p-6">
               <h3 className="text-2xl font-bold mb-2 text-pink-400 group-hover:text-pink-300">CSM Text-to-Speech</h3>
@@ -107,9 +98,7 @@ const LandingPage = () => {
               <div className="absolute inset-0 opacity-30">
                 <div className="absolute top-0 left-0 w-full h-full bg-wave-pattern"></div>
               </div>
-              <svg className="w-32 h-32 text-white relative z-10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8.25 8.25L12 12M12 12L15.75 15.75M12 12L15.75 8.25M12 12L8.25 15.75M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <FaHeadphones className="w-32 h-32 text-white relative z-10" />
             </div>
             <div className="p-6">
               <h3 className="text-2xl font-bold mb-2 text-teal-400 group-hover:text-teal-300">WHISPER Speech-to-Text</h3>
@@ -151,9 +140,9 @@ const LandingPage = () => {
           <div className="text-center text-gray-400">
             <p>© 2023 Comput3 AI Studio. All rights reserved.</p>
             <div className="mt-4 flex justify-center space-x-4">
-              <a href="#" className="hover:text-blue-400 transition-colors">Terms</a>
-              <a href="#" className="hover:text-blue-400 transition-colors">Privacy</a>
-              <a href="#" className="hover:text-blue-400 transition-colors">Contact</a>
+              <button className="hover:text-blue-400 transition-colors">Terms</button>
+              <button className="hover:text-blue-400 transition-colors">Privacy</button>
+              <button className="hover:text-blue-400 transition-colors">Contact</button>
             </div>
           </div>
         </div>
