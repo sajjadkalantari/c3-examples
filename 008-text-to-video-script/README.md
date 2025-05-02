@@ -1,0 +1,147 @@
+# 🎬 Comput3 Text-to-Video Generator
+
+Generate high-quality videos from text prompts using ComfyUI through the Comput3 platform. This tool uses the WanVideo model to transform your text descriptions into dynamic animated videos.
+
+## ✅ Prerequisites
+
+1. 🔑 A Comput3 account with API key (get it from [launch.comput3.ai](https://launch.comput3.ai))
+2. 🐍 Python 3.7 or higher
+3. 🖥️ A running media instance on Comput3 (media:fast type recommended)
+
+## 🚀 Installation
+
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/comput3ai/c3-examples/008-text-to-video-script.git
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Create a `.env` file with your Comput3 API key:
+   ```bash
+   cp .env.example .env
+   # Edit the .env file and add your API key
+   ```
+   
+   Your `.env` file should contain:
+   ```
+   C3_API_KEY=your_c3_api_key_here
+   ```
+
+4. Create output directory (if it doesn't exist):
+   ```bash
+   mkdir -p output
+   ```
+
+## 📋 Usage
+
+### 🖥️ Launching a Media Instance
+
+Before using this tool, you need to have a media instance running on Comput3. You can launch one through:
+
+1. The web interface at [launch.comput3.ai](https://launch.comput3.ai)
+2. The c3-launcher CLI tool from [GitHub](https://github.com/comput3/c3-launcher)
+
+### 🎭 Generating a Video
+
+Once you have a media instance running, you can generate a video using:
+
+```bash
+python3 main.py --prompt "high quality nature video featuring a red panda balancing on a bamboo stem while a bird lands on its head"
+```
+
+Options:
+- `--prompt`, `-p`: ✏️ Text prompt describing the video to generate (required)
+- `--negative-prompt`, `-n`: ❌ Negative prompt to guide generation away from unwanted content
+- `--output-dir`, `-o`: 📁 Directory to save output files (default: `./output`)
+- `--timeout`, `-t`: ⏱️ Timeout in minutes (default: 30)
+- `--verbose`, `-v`: 🔍 Enable verbose logging
+
+### 💡 Examples
+
+Basic usage:
+```bash
+python3 main.py -p "cinematic shot of a spaceship landing on an alien planet with two moons in the sky"
+```
+
+With a custom negative prompt:
+```bash
+python3 main.py -p "underwater scene of a coral reef with colorful fish" -n "blurry, low quality, poor lighting, text, watermark"
+```
+
+## 📁 Project Structure
+
+The project follows a modular structure that makes it easy to understand and modify:
+
+```
+008-text-to-video-script/
+├── config.py              # Configuration and environment variables
+├── comput3_api.py         # API client for Comput3
+├── comfyui_client.py      # ComfyUI client for workflow execution
+├── main.py                # Main script entry point
+├── workflows/             # ComfyUI workflow templates
+│   └── text_to_video.json # The WanVideo workflow
+├── input/                 # Directory for optional input files
+├── output/                # Generated videos will be saved here
+├── .env.example           # Example environment file
+├── .env                   # Your API key (not committed to Git)
+├── README.md              # This documentation
+└── requirements.txt       # Python dependencies
+```
+
+### 🔧 Key Components
+
+- **main.py**: Entry point script that orchestrates the entire process
+- **comput3_api.py**: Handles communication with the Comput3 API
+- **comfyui_client.py**: Manages interaction with the ComfyUI instance
+- **config.py**: Loads environment variables and default configuration
+- **workflows/text_to_video.json**: The ComfyUI workflow template with WanVideo model
+
+## ⚙️ How It Works
+
+1. 🔍 The script checks if you have a running media instance on Comput3
+2. 📋 It loads the WanVideo workflow template
+3. 🔄 It updates the workflow with your text prompt
+4. 🚀 It queues the workflow for execution and monitors progress
+5. 📥 Once complete, it downloads the generated video to the output directory
+
+## 🎮 WanVideo Model
+
+This script uses the WanVideo model from Warp Diffusion, which is particularly good at:
+
+- Creating smooth, natural motion in videos
+- Following detailed text descriptions
+- Generating high-quality, consistent frames
+- Producing videos with good temporal coherence
+
+The workflow is set up to use the Wan2_1-T2V-14B model, which provides a good balance of quality and speed.
+
+## ❓ Troubleshooting
+
+If you encounter issues:
+
+1. **🔴 No running media instance found**
+   - Launch a media instance on Comput3 before running the script
+   - Make sure to use a "media:fast" or "media:large" instance type
+
+2. **⏰ Workflow timeout**
+   - Try increasing the timeout with `--timeout 45`
+   - Complex prompts may require more processing time
+   - Check if your media instance is still running
+
+3. **🔑 API key issues**
+   - Ensure your C3_API_KEY is correctly set in the .env file
+   - The API key should start with "c3_api_"
+   - Check that your account has access to the ComfyUI service
+
+4. **📉 Poor results**
+   - Improve your prompt with more details
+   - Add a stronger negative prompt to guide the generation
+   - Try running with different seed values
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details. 
