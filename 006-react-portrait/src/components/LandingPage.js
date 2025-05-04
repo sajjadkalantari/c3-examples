@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaHeadphones, FaMicrophone, FaVideo, FaImage, FaFilm, FaExchangeAlt } from 'react-icons/fa';
+import { FaHeadphones, FaMicrophone, FaVideo, FaImage, FaFilm, FaExchangeAlt, FaVideo as FaVideoCamera } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import Navbar from './Navbar';
 
@@ -113,6 +113,33 @@ const LandingPage = () => {
                 </span>
                 <span className="inline-block bg-green-900 bg-opacity-50 rounded-full px-3 py-1 text-sm text-green-300">
                   #AIEditor
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Image to Video Card */}
+          <div 
+            className="group bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-xl overflow-hidden shadow-lg border border-gray-700 transform transition duration-300 hover:scale-105 hover:shadow-2xl cursor-pointer"
+            onClick={() => navigate('/image-to-video')}
+          >
+            <div className="h-48 bg-gradient-to-br from-purple-400 to-violet-600 flex items-center justify-center p-4 relative overflow-hidden">
+              <div className="absolute inset-0 opacity-30">
+                <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern"></div>
+              </div>
+              <FaVideoCamera className="w-32 h-32 text-white relative z-10" />
+            </div>
+            <div className="p-6">
+              <h3 className="text-2xl font-bold mb-2 text-purple-400 group-hover:text-purple-300">Image to Video</h3>
+              <p className="text-gray-300">
+                Bring your static images to life with stunning motion and animation using our AI technology.
+              </p>
+              <div className="mt-4">
+                <span className="inline-block bg-purple-900 bg-opacity-50 rounded-full px-3 py-1 text-sm text-purple-300 mr-2">
+                  #Animation
+                </span>
+                <span className="inline-block bg-purple-900 bg-opacity-50 rounded-full px-3 py-1 text-sm text-purple-300">
+                  #AIMotion
                 </span>
               </div>
             </div>

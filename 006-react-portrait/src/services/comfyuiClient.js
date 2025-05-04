@@ -871,21 +871,43 @@ class ComfyUIClient {
    * @returns {string} Image URL
    */
   getImageUrl(filename, subfolder = '') {
-    // Base URL for the image view endpoint
-    let imageUrl = `${this.serverUrl}/view?filename=${encodeURIComponent(filename)}`;
+    // Get the URL for an image file
+    const { serverUrl, originalServerUrl } = this;
     
-    // Add subfolder if provided
+    // For local development, we need to use the original URL (without the proxy)
+    // because the browser will load the image directly
+    let url = originalServerUrl;
+    
+    // Format: serverUrl/view?filename=filename&subfolder=subfolder/type
+    url += `/view?filename=${encodeURIComponent(filename)}`;
+    
     if (subfolder) {
-      imageUrl += `&subfolder=${encodeURIComponent(subfolder)}`;
+      url += `&subfolder=${encodeURIComponent(subfolder)}`;
     }
     
-    // Add type=output for output files
-    if (subfolder.includes('output') || filename.includes('.png') || filename.includes('.jpg')) {
-      imageUrl += '&type=output';
+    url += `&type=output`;
+    
+    return url;
+  }
+  
+  getVideoUrl(filename, subfolder = '') {
+    // Get the URL for a video file (same as getImageUrl but explicitly for videos)
+    const { serverUrl, originalServerUrl } = this;
+    
+    // For local development, we need to use the original URL (without the proxy)
+    // because the browser will load the video directly
+    let url = originalServerUrl;
+    
+    // Format: serverUrl/view?filename=filename&subfolder=subfolder/type
+    url += `/view?filename=${encodeURIComponent(filename)}`;
+    
+    if (subfolder) {
+      url += `&subfolder=${encodeURIComponent(subfolder)}`;
     }
     
-    console.log(`🔗 Generated image URL: ${imageUrl}`);
-    return imageUrl;
+    url += `&type=output`;
+    
+    return url;
   }
   
   /**

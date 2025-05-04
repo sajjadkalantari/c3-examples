@@ -10,6 +10,7 @@ const config = {
   TEXT_TO_IMAGE_WORKFLOW_PATH: '/workflows/text_to_image.json',
   TEXT_TO_VIDEO_WORKFLOW_PATH: '/workflows/text_to_video.json',
   IMAGE_TO_IMAGE_WORKFLOW_PATH: '/workflows/image_to_image.json',
+  IMAGE_TO_VIDEO_WORKFLOW_PATH: '/workflows/image_to_video.json',
 
   // ComfyUI configuration
   DEFAULT_TIMEOUT_MINUTES: 30,
