@@ -91,22 +91,44 @@ class ComfyUIClient {
    */
   async loadWorkflow(workflowPath) {
     try {
+      console.log(`Attempting to load workflow from: ${workflowPath}`);
+      
       // If workflowPath is already an object, return it
       if (typeof workflowPath === 'object') {
+        console.log('Workflow provided as object, using directly');
         return workflowPath;
       }
       
       // Otherwise, fetch it
+      console.log(`Fetching workflow from URL: ${workflowPath}`);
       const response = await fetch(workflowPath);
+      
       if (!response.ok) {
-        throw new Error(`Failed to fetch workflow: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`Failed to fetch workflow: ${response.status} ${response.statusText}`);
+        console.error(`Response body: ${errorText}`);
+        throw new Error(`Failed to fetch workflow: ${response.status} ${response.statusText} - ${errorText.substring(0, 200)}`);
       }
       
-      const workflow = await response.json();
-      return workflow;
+      // Try to parse JSON response
+      try {
+        const workflow = await response.json();
+        console.log('Workflow loaded successfully, structure:', 
+          workflow.nodes ? `${workflow.nodes.length} nodes` : 'No nodes found',
+          'Format:',
+          workflow.nodes && workflow.nodes.length > 0 ? 'ComfyUI format' : 'Unknown format'
+        );
+        return workflow;
+      } catch (jsonError) {
+        console.error('Error parsing workflow JSON:', jsonError);
+        const responseText = await response.text();
+        console.error('Raw response:', responseText.substring(0, 500));
+        throw new Error(`Invalid workflow JSON: ${jsonError.message}`);
+      }
     } catch (error) {
-      console.error(`❌ Error loading workflow from ${workflowPath}: ${error.message}`);
-      throw error;
+      console.error(`❌ Error loading workflow from ${workflowPath}:`, error);
+      // Re-throw with more context
+      throw new Error(`Failed to load workflow: ${error.message}`);
     }
   }
   
@@ -691,6 +713,256 @@ class ComfyUIClient {
     
     console.error(`⏱️ Workflow execution timed out after ${timeoutMinutes} minutes`);
     return false;
+  }
+  
+  /**
+   * Update a text-to-image workflow with the given parameters
+   * @param {Object} workflow - Workflow JSON
+   * @param {string} positivePrompt - Positive prompt text
+   * @param {string} negativePrompt - Negative prompt text
+   * @param {number} width - Image width
+   * @param {number} height - Image height
+   * @param {number} seed - Random seed
+   * @param {number} steps - Number of sampling steps
+   * @returns {Object} Updated workflow
+   */
+  updateTextToImageWorkflow(workflow, positivePrompt, negativePrompt, width = 1024, height = 1024, seed = null, steps = 35) {
+    // Validate input workflow
+    const validation = this.validateWorkflow(workflow);
+    if (!validation.valid) {
+      const errorMessage = `Invalid workflow: ${validation.errors.join(', ')}`;
+      console.error('❌ ' + errorMessage);
+      throw new Error(errorMessage);
+    }
+
+    console.log(`Updating workflow with parameters: prompt=${positivePrompt.slice(0, 20)}..., negativePrompt=${negativePrompt.slice(0, 20)}..., width=${width}, height=${height}, seed=${seed}, steps=${steps}`);
+    
+    // Make a copy of the workflow to avoid modifying the original
+    const updatedWorkflow = JSON.parse(JSON.stringify(workflow));
+    
+    // Diagnostic info
+    console.log(`Workflow contains ${updatedWorkflow.nodes.length} nodes`);
+    
+    let positiveNodeFound = false;
+    let negativeNodeFound = false;
+    let samplerNodeFound = false;
+    let latentNodeFound = false;
+    
+    // Find nodes by their titles or types
+    updatedWorkflow.nodes.forEach(node => {
+      console.log(`Inspecting node: id=${node.id}, type=${node.type}, title=${node.title || 'N/A'}`);
+      
+      // Update positive prompt
+      if (node.type === 'CLIPTextEncode' && node.title === 'Positive Prompt' && node.widgets_values) {
+        node.widgets_values[0] = positivePrompt;
+        console.log('✅ Updated positive prompt');
+        positiveNodeFound = true;
+      }
+      
+      // Update negative prompt
+      if (node.type === 'CLIPTextEncode' && node.title === 'Negative Prompt' && node.widgets_values) {
+        node.widgets_values[0] = negativePrompt;
+        console.log('✅ Updated negative prompt');
+        negativeNodeFound = true;
+      }
+      
+      // Update KSampler settings
+      if (node.type === 'KSampler' && node.widgets_values) {
+        console.log(`Found KSampler node with widgets: ${JSON.stringify(node.widgets_values)}`);
+        // Check widget structure based on the workflow
+        // Typical order: seed, steps, cfg, sampler_name, scheduler, denoise
+        if (seed !== null && node.widgets_values.length > 0) {
+          node.widgets_values[0] = seed;
+          console.log(`⚙️ Updated KSampler seed to ${seed}`);
+        }
+        
+        if (node.widgets_values.length > 1) {
+          node.widgets_values[1] = steps;
+          console.log(`⚙️ Updated KSampler steps to ${steps}`);
+        }
+        samplerNodeFound = true;
+      }
+      
+      // Update SD3 Sampler settings (if present)
+      if (node.type === 'SONICSampler' && node.widgets_values) {
+        console.log(`Found SONICSampler node with widgets: ${JSON.stringify(node.widgets_values)}`);
+        // Update relevant settings based on the workflow structure
+        if (seed !== null) {
+          // Find the seed value widget index
+          const seedIndex = 0; // Adjust based on actual workflow
+          if (node.widgets_values.length > seedIndex) {
+            node.widgets_values[seedIndex] = seed;
+            console.log(`⚙️ Updated SONICSampler seed to ${seed}`);
+          }
+        }
+        
+        // Find the steps value widget index
+        const stepsIndex = 1; // Adjust based on actual workflow
+        if (node.widgets_values.length > stepsIndex) {
+          node.widgets_values[stepsIndex] = steps;
+          console.log(`⚙️ Updated SONICSampler steps to ${steps}`);
+        }
+        samplerNodeFound = true;
+      }
+      
+      // Update latent image dimensions
+      if (node.type === 'EmptySD3LatentImage' && node.widgets_values) {
+        console.log(`Found EmptySD3LatentImage node with widgets: ${JSON.stringify(node.widgets_values)}`);
+        if (node.widgets_values.length >= 2) {
+          node.widgets_values[0] = width;
+          node.widgets_values[1] = height;
+          console.log(`📐 Updated image dimensions to ${width}x${height}`);
+          latentNodeFound = true;
+        }
+      }
+      
+      // Also check for EmptyLatentImage for backwards compatibility
+      if (node.type === 'EmptyLatentImage' && node.widgets_values) {
+        console.log(`Found EmptyLatentImage node with widgets: ${JSON.stringify(node.widgets_values)}`);
+        if (node.widgets_values.length >= 2) {
+          node.widgets_values[0] = width;
+          node.widgets_values[1] = height;
+          console.log(`📐 Updated image dimensions to ${width}x${height}`);
+          latentNodeFound = true;
+        }
+      }
+      
+      // Update the SaveImage node if present
+      if (node.type === 'SaveImage' && node.widgets_values) {
+        // Generate a unique filename based on the prompt (truncated) and timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const promptSlug = positivePrompt.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '_');
+        const filename = `${promptSlug}_${timestamp}`;
+        
+        // Update the filename widget value (assuming it's the first widget)
+        if (node.widgets_values.length > 0) {
+          node.widgets_values[0] = filename;
+          console.log(`💾 Updated save filename to: ${filename}`);
+        }
+      }
+    });
+    
+    // Log whether all required nodes were found
+    console.log(`Required nodes found: positive=${positiveNodeFound}, negative=${negativeNodeFound}, sampler=${samplerNodeFound}, latent=${latentNodeFound}`);
+    
+    if (!positiveNodeFound) {
+      console.warn('⚠️ Positive prompt node not found in workflow');
+    }
+    
+    if (!negativeNodeFound) {
+      console.warn('⚠️ Negative prompt node not found in workflow');
+    }
+    
+    if (!samplerNodeFound) {
+      console.warn('⚠️ Sampler node (KSampler or SONICSampler) not found in workflow');
+    }
+    
+    if (!latentNodeFound) {
+      console.warn('⚠️ Latent image node not found in workflow');
+    }
+    
+    return updatedWorkflow;
+  }
+  
+  /**
+   * Get a direct URL to an image file on the server
+   * @param {string} filename - Image filename
+   * @param {string} subfolder - Subfolder (optional)
+   * @returns {string} Image URL
+   */
+  getImageUrl(filename, subfolder = '') {
+    // Base URL for the image view endpoint
+    let imageUrl = `${this.serverUrl}/view?filename=${encodeURIComponent(filename)}`;
+    
+    // Add subfolder if provided
+    if (subfolder) {
+      imageUrl += `&subfolder=${encodeURIComponent(subfolder)}`;
+    }
+    
+    // Add type=output for output files
+    if (subfolder.includes('output') || filename.includes('.png') || filename.includes('.jpg')) {
+      imageUrl += '&type=output';
+    }
+    
+    console.log(`🔗 Generated image URL: ${imageUrl}`);
+    return imageUrl;
+  }
+  
+  /**
+   * Validate that a workflow has the required structure and nodes
+   * @param {Object} workflow - The workflow to validate
+   * @returns {Object} Validation result: { valid: boolean, errors: string[] }
+   */
+  validateWorkflow(workflow) {
+    const errors = [];
+    
+    if (!workflow) {
+      errors.push('Workflow is null or undefined');
+      return { valid: false, errors };
+    }
+    
+    if (typeof workflow !== 'object') {
+      errors.push(`Workflow is not an object: ${typeof workflow}`);
+      return { valid: false, errors };
+    }
+    
+    // Check if workflow has nodes array
+    if (!workflow.nodes) {
+      errors.push('Workflow is missing "nodes" property');
+    } else if (!Array.isArray(workflow.nodes)) {
+      errors.push(`Workflow "nodes" is not an array: ${typeof workflow.nodes}`);
+    } else if (workflow.nodes.length === 0) {
+      errors.push('Workflow "nodes" array is empty');
+    }
+    
+    // If nodes exist, check for required node types
+    if (workflow.nodes && Array.isArray(workflow.nodes)) {
+      // Check for required node types
+      const nodeTypes = workflow.nodes.map(node => node.type);
+      
+      // Count nodes by type or title
+      let positivePromptCount = 0;
+      let negativePromptCount = 0;
+      let samplerCount = 0;
+      let latentImageCount = 0;
+      
+      for (const node of workflow.nodes) {
+        if (node.type === 'CLIPTextEncode' && node.title === 'Positive Prompt') {
+          positivePromptCount++;
+        } else if (node.type === 'CLIPTextEncode' && node.title === 'Negative Prompt') {
+          negativePromptCount++;
+        } else if (node.type === 'KSampler' || node.type === 'SONICSampler') {
+          samplerCount++;
+        } else if (node.type === 'EmptySD3LatentImage' || node.type === 'EmptyLatentImage') {
+          latentImageCount++;
+        }
+      }
+      
+      // Report missing required nodes
+      if (positivePromptCount === 0) {
+        errors.push('Workflow is missing positive prompt node (CLIPTextEncode with title "Positive Prompt")');
+      }
+      
+      if (negativePromptCount === 0) {
+        errors.push('Workflow is missing negative prompt node (CLIPTextEncode with title "Negative Prompt")');
+      }
+      
+      if (samplerCount === 0) {
+        errors.push('Workflow is missing sampler node (KSampler or SONICSampler)');
+      }
+      
+      if (latentImageCount === 0) {
+        errors.push('Workflow is missing latent image node (EmptySD3LatentImage or EmptyLatentImage)');
+      }
+      
+      // Log node types for debugging
+      console.log('Workflow node types:', nodeTypes.join(', '));
+    }
+    
+    return {
+      valid: errors.length === 0,
+      errors
+    };
   }
 }
 

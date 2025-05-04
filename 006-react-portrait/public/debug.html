@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Text-to-Image Debugging Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #333;
+    }
+    textarea {
+      width: 100%;
+      height: 150px;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 8px 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    .result {
+      margin-top: 20px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background-color: #f9f9f9;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    #json-viewer {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Text-to-Image Debugging Tool</h1>
+  
+  <div>
+    <h2>Workflow JSON</h2>
+    <textarea id="workflow" placeholder="Paste your workflow JSON here..."></textarea>
+    <div class="toolbar">
+      <button id="load-workflow">Load Workflow</button>
+      <button id="clear-workflow">Clear</button>
+      <button id="fetch-test-workflow">Fetch Test Workflow</button>
+    </div>
+  </div>
+  
+  <div>
+    <h2>Parameters</h2>
+    <div>
+      <label for="positive-prompt">Positive Prompt:</label>
+      <textarea id="positive-prompt" placeholder="Enter positive prompt...">A beautiful sunset over mountains, digital art</textarea>
+    </div>
+    <div>
+      <label for="negative-prompt">Negative Prompt:</label>
+      <textarea id="negative-prompt" placeholder="Enter negative prompt...">blurry, low quality, distorted</textarea>
+    </div>
+    <div class="toolbar">
+      <div>
+        <label for="width">Width:</label>
+        <select id="width">
+          <option value="512">512</option>
+          <option value="768">768</option>
+          <option value="1024" selected>1024</option>
+          <option value="1280">1280</option>
+        </select>
+      </div>
+      <div>
+        <label for="height">Height:</label>
+        <select id="height">
+          <option value="512">512</option>
+          <option value="768">768</option>
+          <option value="1024" selected>1024</option>
+          <option value="1280">1280</option>
+        </select>
+      </div>
+      <div>
+        <label for="steps">Steps:</label>
+        <input type="number" id="steps" value="35" min="1" max="150">
+      </div>
+      <div>
+        <label for="seed">Seed:</label>
+        <input type="number" id="seed" value="42">
+      </div>
+    </div>
+    <button id="update-workflow">Update Workflow</button>
+  </div>
+  
+  <div class="result">
+    <h2>Result</h2>
+    <div id="json-viewer">
+      <pre id="result-json"></pre>
+    </div>
+  </div>
+
+  <div class="mt-8">
+    <h2>Workflow Loading Test</h2>
+    <p>This will attempt to load the workflow file directly and diagnose any issues.</p>
+    <button id="test-file-access" class="px-8 py-3 rounded bg-blue-500 text-white">Test Workflow File Access</button>
+    <div class="mt-4">
+      <h3>Test Result:</h3>
+      <pre id="file-test-result" class="bg-gray-100 p-4 rounded mt-2 max-h-80 overflow-auto"></pre>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const workflowTextarea = document.getElementById('workflow');
+      const positivePromptInput = document.getElementById('positive-prompt');
+      const negativePromptInput = document.getElementById('negative-prompt');
+      const widthSelect = document.getElementById('width');
+      const heightSelect = document.getElementById('height');
+      const stepsInput = document.getElementById('steps');
+      const seedInput = document.getElementById('seed');
+      const resultJson = document.getElementById('result-json');
+      
+      // Button event listeners
+      document.getElementById('load-workflow').addEventListener('click', loadWorkflow);
+      document.getElementById('clear-workflow').addEventListener('click', clearWorkflow);
+      document.getElementById('update-workflow').addEventListener('click', updateWorkflow);
+      document.getElementById('fetch-test-workflow').addEventListener('click', fetchTestWorkflow);
+      
+      function loadWorkflow() {
+        try {
+          const workflow = JSON.parse(workflowTextarea.value);
+          resultJson.textContent = "Workflow loaded successfully!";
+        } catch (error) {
+          resultJson.textContent = `Error loading workflow: ${error.message}`;
+        }
+      }
+      
+      function clearWorkflow() {
+        workflowTextarea.value = '';
+        resultJson.textContent = '';
+      }
+      
+      function fetchTestWorkflow() {
+        fetch('/workflows/text_to_image.json')
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`Failed to fetch workflow: ${response.status} ${response.statusText}`);
+            }
+            return response.json();
+          })
+          .then(workflow => {
+            workflowTextarea.value = JSON.stringify(workflow, null, 2);
+            resultJson.textContent = "Test workflow loaded successfully!";
+          })
+          .catch(error => {
+            resultJson.textContent = `Error fetching workflow: ${error.message}`;
+          });
+      }
+      
+      function updateWorkflow() {
+        try {
+          if (!workflowTextarea.value) {
+            resultJson.textContent = "Please load a workflow first!";
+            return;
+          }
+          
+          const workflow = JSON.parse(workflowTextarea.value);
+          const positivePrompt = positivePromptInput.value;
+          const negativePrompt = negativePromptInput.value;
+          const width = parseInt(widthSelect.value);
+          const height = parseInt(heightSelect.value);
+          const steps = parseInt(stepsInput.value);
+          const seed = parseInt(seedInput.value);
+          
+          // Update the workflow
+          const updatedWorkflow = updateTextToImageWorkflow(
+            workflow,
+            positivePrompt,
+            negativePrompt,
+            width,
+            height,
+            seed,
+            steps
+          );
+          
+          // Display the result
+          resultJson.textContent = JSON.stringify(updatedWorkflow, null, 2);
+        } catch (error) {
+          resultJson.textContent = `Error updating workflow: ${error.message}`;
+        }
+      }
+      
+      function updateTextToImageWorkflow(workflow, positivePrompt, negativePrompt, width = 1024, height = 1024, seed = null, steps = 35) {
+        // Make a copy of the workflow to avoid modifying the original
+        const updatedWorkflow = JSON.parse(JSON.stringify(workflow));
+        const logs = [];
+        
+        // Find nodes by their titles or types
+        updatedWorkflow.nodes.forEach(node => {
+          // Update positive prompt
+          if (node.type === 'CLIPTextEncode' && node.title === 'Positive Prompt' && node.widgets_values) {
+            node.widgets_values[0] = positivePrompt;
+            logs.push('✅ Updated positive prompt');
+          }
+          
+          // Update negative prompt
+          if (node.type === 'CLIPTextEncode' && node.title === 'Negative Prompt' && node.widgets_values) {
+            node.widgets_values[0] = negativePrompt;
+            logs.push('✅ Updated negative prompt');
+          }
+          
+          // Update KSampler settings
+          if (node.type === 'KSampler' && node.widgets_values) {
+            // Check widget structure based on the workflow
+            // Typical order: seed, steps, cfg, sampler_name, scheduler, denoise
+            if (seed !== null && node.widgets_values.length > 0) {
+              node.widgets_values[0] = seed;
+              logs.push(`⚙️ Updated KSampler seed to ${seed}`);
+            }
+            
+            if (node.widgets_values.length > 1) {
+              node.widgets_values[1] = steps;
+              logs.push(`⚙️ Updated KSampler steps to ${steps}`);
+            }
+          }
+          
+          // Update SD3 Sampler settings (if present)
+          if (node.type === 'SONICSampler' && node.widgets_values) {
+            // Update relevant settings based on the workflow structure
+            if (seed !== null) {
+              // Find the seed value widget index
+              const seedIndex = 0; // Adjust based on actual workflow
+              if (node.widgets_values.length > seedIndex) {
+                node.widgets_values[seedIndex] = seed;
+                logs.push(`⚙️ Updated SONICSampler seed to ${seed}`);
+              }
+            }
+            
+            // Find the steps value widget index
+            const stepsIndex = 1; // Adjust based on actual workflow
+            if (node.widgets_values.length > stepsIndex) {
+              node.widgets_values[stepsIndex] = steps;
+              logs.push(`⚙️ Updated SONICSampler steps to ${steps}`);
+            }
+          }
+          
+          // Update latent image dimensions
+          if (node.type === 'EmptySD3LatentImage' && node.widgets_values) {
+            if (node.widgets_values.length >= 2) {
+              node.widgets_values[0] = width;
+              node.widgets_values[1] = height;
+              logs.push(`📐 Updated image dimensions to ${width}x${height}`);
+            }
+          }
+          
+          // Also check for EmptyLatentImage for backwards compatibility
+          if (node.type === 'EmptyLatentImage' && node.widgets_values) {
+            if (node.widgets_values.length >= 2) {
+              node.widgets_values[0] = width;
+              node.widgets_values[1] = height;
+              logs.push(`📐 Updated image dimensions to ${width}x${height}`);
+            }
+          }
+          
+          // Update the SaveImage node if present
+          if (node.type === 'SaveImage' && node.widgets_values) {
+            // Generate a unique filename based on the prompt (truncated) and timestamp
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const promptSlug = positivePrompt.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '_');
+            const filename = `${promptSlug}_${timestamp}`;
+            
+            // Update the filename widget value (assuming it's the first widget)
+            if (node.widgets_values.length > 0) {
+              node.widgets_values[0] = filename;
+              logs.push(`💾 Updated save filename to: ${filename}`);
+            }
+          }
+        });
+        
+        // Add logs to the updated workflow for debugging
+        updatedWorkflow._logs = logs;
+        return updatedWorkflow;
+      }
+
+      document.getElementById('test-file-access').addEventListener('click', testFileAccess);
+      
+      async function testFileAccess() {
+        const resultElement = document.getElementById('file-test-result');
+        resultElement.textContent = 'Testing workflow file access...';
+        
+        try {
+          // Test direct access to the workflow file
+          const workflowPath = '/workflows/text_to_image.json';
+          const response = await fetch(workflowPath);
+          
+          if (!response.ok) {
+            resultElement.textContent = `❌ Failed to fetch workflow: ${response.status} ${response.statusText}`;
+            return;
+          }
+          
+          try {
+            const workflow = await response.json();
+            const nodeCount = workflow.nodes ? workflow.nodes.length : 0;
+            
+            resultElement.textContent = `✅ Workflow loaded successfully!\n\nWorkflow details:\n- ID: ${workflow.id || 'N/A'}\n- Node count: ${nodeCount}\n- First few nodes: ${
+              workflow.nodes 
+                ? workflow.nodes.slice(0, 3).map(n => `\n  • ${n.id}: ${n.type} (${n.title || 'N/A'})`).join('')
+                : 'None found'
+            }\n\nStructure valid: ${workflow.nodes && Array.isArray(workflow.nodes) ? 'Yes' : 'No'}`;
+          } catch (jsonError) {
+            const text = await response.text();
+            resultElement.textContent = `❌ Failed to parse workflow JSON: ${jsonError.message}\n\nResponse preview (first 500 chars):\n${text.substring(0, 500)}`;
+          }
+        } catch (error) {
+          resultElement.textContent = `❌ Error testing file access: ${error.message}`;
+        }
+      }
+    });
+  </script>
+</body>
+</html> 
