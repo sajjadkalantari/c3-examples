@@ -964,6 +964,184 @@ class ComfyUIClient {
       errors
     };
   }
+  
+  /**
+   * Update a text-to-video workflow with the given parameters
+   * @param {Object} workflow - Workflow JSON
+   * @param {string} prompt - Text prompt describing the video
+   * @param {string} negativePrompt - Negative prompt for things to avoid
+   * @returns {Object} Updated workflow
+   */
+  updateTextToVideoWorkflow(workflow, prompt, negativePrompt = "poor quality, blurry, pixelated, low resolution, watermark, signature, text, letters, words") {
+    // Validate input workflow
+    const validation = this.validateWorkflow(workflow);
+    if (!validation.valid) {
+      const errorMessage = `Invalid workflow: ${validation.errors.join(', ')}`;
+      console.error('❌ ' + errorMessage);
+      throw new Error(errorMessage);
+    }
+
+    console.log(`Updating text-to-video workflow with prompt: ${prompt.slice(0, 30)}...`);
+    
+    // Make a copy of the workflow to avoid modifying the original
+    const updatedWorkflow = JSON.parse(JSON.stringify(workflow));
+    
+    // Flag to track if we found and updated the prompt
+    let promptUpdated = false;
+    
+    // Find nodes by their titles or types
+    if (updatedWorkflow.nodes && Array.isArray(updatedWorkflow.nodes)) {
+      updatedWorkflow.nodes.forEach(node => {
+        // Look for the WanVideoTextEncode node
+        if (node.type === 'WanVideoTextEncode' && node.widgets_values) {
+          // Update the positive prompt
+          node.widgets_values[0] = prompt;
+          console.log('✅ Updated video positive prompt');
+          promptUpdated = true;
+          
+          // Also update negative prompt if available
+          if (node.widgets_values.length >= 2) {
+            node.widgets_values[1] = negativePrompt;
+            console.log('✅ Updated video negative prompt');
+          }
+        }
+      });
+    }
+    
+    if (!promptUpdated) {
+      console.warn("⚠️ Could not find WanVideoTextEncode node to update prompt");
+      
+      // Create a simplified workflow as fallback
+      // This follows the simplified API structure from the Python script
+      const simplifiedWorkflow = {};
+      
+      // 1. T5 Encoder
+      simplifiedWorkflow["1"] = {
+        class_type: "LoadWanVideoT5TextEncoder",
+        inputs: {
+          model_name: "umt5-xxl-enc-bf16.safetensors",
+          precision: "bf16",
+          offload_model: "offload_device",
+          offload_type: "disabled"
+        }
+      };
+      
+      // 2. Text Encoder
+      simplifiedWorkflow["2"] = {
+        class_type: "WanVideoTextEncode",
+        inputs: {
+          t5: ["1", 0],
+          positive_prompt: prompt,
+          negative_prompt: negativePrompt,
+          force_zeros: true
+        }
+      };
+      
+      // 3. Empty Embeds
+      simplifiedWorkflow["3"] = {
+        class_type: "WanVideoEmptyEmbeds",
+        inputs: {
+          width: 832,
+          height: 480, 
+          num_frames: 16
+        }
+      };
+      
+      // 4. Block Swap
+      simplifiedWorkflow["4"] = {
+        class_type: "WanVideoBlockSwap",
+        inputs: {
+          blocks_to_swap: 20,
+          offload_txt_emb: true,
+          offload_img_emb: true
+        }
+      };
+      
+      // 5. Model Loader
+      simplifiedWorkflow["5"] = {
+        class_type: "WanVideoModelLoader",
+        inputs: {
+          block_swap_args: ["4", 0],
+          model: "WanVideo/Wan2_1-T2V-14B_fp8_e4m3fn.safetensors",
+          base_precision: "fp16",
+          load_device: "main_device",
+          quantization: "disabled"
+        }
+      };
+      
+      // 6. VAE Loader
+      simplifiedWorkflow["6"] = {
+        class_type: "WanVideoVAELoader",
+        inputs: {
+          model_name: "wan_2.1_vae.safetensors"
+        }
+      };
+      
+      // 7. Tea Cache
+      simplifiedWorkflow["7"] = {
+        class_type: "WanVideoTeaCache",
+        inputs: {
+          start_step: 0.1,
+          end_step: 0.7,
+          rel_l1_thresh: 0.97,
+          use_coefficients: false,
+          cache_device: "offload_device"
+        }
+      };
+      
+      // 8. Sampler
+      simplifiedWorkflow["8"] = {
+        class_type: "WanVideoSampler",
+        inputs: {
+          model: ["5", 0],
+          text_embeds: ["2", 0],
+          image_embeds: ["3", 0],
+          teacache_args: ["7", 0],
+          steps: 25,
+          cfg: 6.0,
+          seed: Math.floor(Date.now() * 1000) % (2**32),
+          scheduler: "unipc",
+          shift: 5,
+          force_offload: false,
+          riflex_freq_index: 0
+        }
+      };
+      
+      // 9. Decoder
+      simplifiedWorkflow["9"] = {
+        class_type: "WanVideoDecode",
+        inputs: {
+          vae: ["6", 0],
+          samples: ["8", 0],
+          restore_faces: true,
+          tile_x: 272,
+          tile_y: 272,
+          tile_stride_x: 144,
+          tile_stride_y: 128,
+          enable_vae_tiling: true
+        }
+      };
+      
+      // 10. Video Combiner
+      simplifiedWorkflow["10"] = {
+        class_type: "VHS_VideoCombine",
+        inputs: {
+          images: ["9", 0],
+          frame_rate: 24,
+          loop_count: 0,
+          filename_prefix: "video_output",
+          format: "video/h264-mp4",
+          pingpong: false,
+          save_output: true
+        }
+      };
+      
+      console.log('Created simplified workflow for text-to-video generation');
+      return { prompt: simplifiedWorkflow };
+    }
+    
+    return updatedWorkflow;
+  }
 }
 
 export default ComfyUIClient; 

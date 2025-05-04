@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaHeadphones, FaMicrophone, FaVideo, FaImage } from 'react-icons/fa';
+import { FaHeadphones, FaMicrophone, FaVideo, FaImage, FaFilm } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import Navbar from './Navbar';
 
@@ -36,7 +36,7 @@ const LandingPage = () => {
         </div>
 
         {/* Feature Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-8 max-w-7xl mx-auto">
           {/* Portrait Generation Card */}
           <div 
             className="group bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-xl overflow-hidden shadow-lg border border-gray-700 transform transition duration-300 hover:scale-105 hover:shadow-2xl cursor-pointer"
@@ -86,6 +86,33 @@ const LandingPage = () => {
                 </span>
                 <span className="inline-block bg-amber-900 bg-opacity-50 rounded-full px-3 py-1 text-sm text-amber-300">
                   #AIArt
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Text to Video Card */}
+          <div 
+            className="group bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-xl overflow-hidden shadow-lg border border-gray-700 transform transition duration-300 hover:scale-105 hover:shadow-2xl cursor-pointer"
+            onClick={() => navigate('/text-to-video')}
+          >
+            <div className="h-48 bg-gradient-to-br from-red-400 to-rose-600 flex items-center justify-center p-4 relative overflow-hidden">
+              <div className="absolute inset-0 opacity-30">
+                <div className="absolute top-0 left-0 w-full h-full bg-wave-pattern"></div>
+              </div>
+              <FaFilm className="w-32 h-32 text-white relative z-10" />
+            </div>
+            <div className="p-6">
+              <h3 className="text-2xl font-bold mb-2 text-rose-400 group-hover:text-rose-300">Text to Video</h3>
+              <p className="text-gray-300">
+                Transform text descriptions into captivating videos with our advanced AI video generation.
+              </p>
+              <div className="mt-4">
+                <span className="inline-block bg-rose-900 bg-opacity-50 rounded-full px-3 py-1 text-sm text-rose-300 mr-2">
+                  #VideoGeneration
+                </span>
+                <span className="inline-block bg-rose-900 bg-opacity-50 rounded-full px-3 py-1 text-sm text-rose-300">
+                  #AIVideo
                 </span>
               </div>
             </div>

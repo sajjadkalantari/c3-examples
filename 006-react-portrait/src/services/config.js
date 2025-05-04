@@ -8,6 +8,7 @@ const config = {
   DEFAULT_OUTPUT_DIR: 'output',
   WORKFLOW_TEMPLATE_PATH: '/workflows/avatar_generator.json',
   TEXT_TO_IMAGE_WORKFLOW_PATH: '/workflows/text_to_image.json',
+  TEXT_TO_VIDEO_WORKFLOW_PATH: '/workflows/text_to_video.json',
 
   // ComfyUI configuration
   DEFAULT_TIMEOUT_MINUTES: 30,
