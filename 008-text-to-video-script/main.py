@@ -25,8 +25,8 @@ def parse_arguments():
                         help="Negative prompt to guide the generation away from unwanted content")
     parser.add_argument("--output-dir", "-o", type=str, default=DEFAULT_OUTPUT_DIR, 
                         help=f"Directory to save output files (default: {DEFAULT_OUTPUT_DIR})")
-    parser.add_argument("--timeout", "-t", type=int, default=30,
-                        help="Timeout in minutes (default: 30)")
+    parser.add_argument("--timeout", "-t", type=int, default=120,
+                        help="Timeout in minutes (default: 120)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
     
     return parser.parse_args()
@@ -48,6 +48,10 @@ def setup_logging(verbose: bool = False):
             logging.StreamHandler()
         ]
     )
+    
+    # If verbose, set all loggers to DEBUG
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
     
     logging.info(f"📝 Logging to: {log_file}")
 

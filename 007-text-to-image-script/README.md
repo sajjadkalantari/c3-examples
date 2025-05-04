@@ -1,6 +1,7 @@
 # 🎨 Comput3 Text-to-Image Generator
 
 Generate high-quality images from text prompts using ComfyUI through the Comput3 platform.
+Now with video generation capability for creating talking portrait videos!
 
 ## ✅ Prerequisites
 
@@ -63,6 +64,20 @@ Options:
 - `--output-dir`, `-o`: 📁 Directory to save output files (default: `./output`)
 - `--timeout`, `-t`: ⏱️ Timeout in minutes (default: 15)
 - `--verbose`, `-v`: 🔍 Enable verbose logging
+
+### 🎬 Video Generation
+
+The script now supports generating talking portrait videos from images. The updated workflow will:
+
+1. Generate an image based on your prompt
+2. Use the SONIC model to animate the image with lip movements synchronized to audio
+3. Output a video file with the animated portrait
+
+To use video generation, you need to:
+1. Place an audio file (e.g., welcome.flac) in the input directory
+2. The workflow will automatically use this audio to generate lip movements
+
+Note: Video generation requires the svd_xt.safetensors model and SONIC unet.pth on your Comput3 instance.
 
 ### 💡 Examples
 

@@ -36,7 +36,8 @@
           "type": "IMAGE",
           "slot_index": 0,
           "links": [
-            51
+            51,
+            207
           ]
         }
       ],
@@ -242,8 +243,8 @@
         98.9148178100586
       ],
       "size": [
-        966.615966796875,
-        1025.3206787109375
+        210,
+        46
       ],
       "flags": {},
       "order": 11,
@@ -458,6 +459,398 @@
       ],
       "color": "#323",
       "bgcolor": "#535"
+    },
+    {
+      "id": 13,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        1600,
+        200
+      ],
+      "size": [
+        210,
+        46
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "frame_rate",
+          "type": "INT",
+          "link": 210,
+          "widget": {
+            "name": "frame_rate",
+            "value": 24
+          }
+        },
+        {
+          "name": "loop_count",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "loop_count",
+            "value": 0
+          }
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "filename_prefix",
+            "value": "Video"
+          }
+        },
+        {
+          "name": "format",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "format",
+            "value": "video/h264-mp4"
+          }
+        },
+        {
+          "name": "pix_fmt",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "pix_fmt",
+            "value": "yuv420p"
+          }
+        },
+        {
+          "name": "crf",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "crf",
+            "value": 19
+          }
+        },
+        {
+          "name": "save_metadata",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_metadata",
+            "value": true
+          }
+        },
+        {
+          "name": "trim_to_audio",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "trim_to_audio",
+            "value": false
+          }
+        },
+        {
+          "name": "pingpong",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "pingpong",
+            "value": false
+          }
+        },
+        {
+          "name": "save_output",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_output",
+            "value": true
+          }
+        },
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 208
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 209
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "slot_index": 0,
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.29",
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": [],
+      "_meta": {
+        "title": "Video Combine 🎥🅥🅗🅢"
+      }
+    },
+    {
+      "id": 26,
+      "type": "LoadAudio",
+      "pos": [
+        1200,
+        400
+      ],
+      "size": [
+        210,
+        46
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": {
+        "audio": "welcome.flac"
+      },
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "slot_index": 0,
+          "links": [
+            200,
+            209
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.29",
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [],
+      "_meta": {
+        "title": "LoadAudio"
+      }
+    },
+    {
+      "id": 31,
+      "type": "SONICSampler",
+      "pos": [
+        1400,
+        300
+      ],
+      "size": [
+        210,
+        46
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": {
+        "seed": 2054408119,
+        "inference_steps": 25,
+        "dynamic_scale": 1,
+        "fps": 24,
+        "model": [
+          "34",
+          0
+        ],
+        "data_dict": [
+          "33",
+          0
+        ]
+      },
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            208
+          ]
+        },
+        {
+          "name": "FPS",
+          "type": "INT",
+          "slot_index": 1,
+          "links": [
+            210
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.29",
+        "Node name for S&R": "SONICSampler"
+      },
+      "widgets_values": [],
+      "_meta": {
+        "title": "SONICSampler"
+      }
+    },
+    {
+      "id": 32,
+      "type": "ImageOnlyCheckpointLoader",
+      "pos": [
+        800,
+        300
+      ],
+      "size": [
+        210,
+        46
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": {
+        "ckpt_name": "svd_xt.safetensors"
+      },
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            201
+          ]
+        },
+        {
+          "name": "CLIP_VISION",
+          "type": "CLIP_VISION",
+          "slot_index": 1,
+          "links": [
+            202
+          ]
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "slot_index": 2,
+          "links": [
+            203
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.29",
+        "Node name for S&R": "ImageOnlyCheckpointLoader"
+      },
+      "widgets_values": [],
+      "_meta": {
+        "title": "Image Only Checkpoint Loader (img2vid model)"
+      }
+    },
+    {
+      "id": 33,
+      "type": "SONIC_PreData",
+      "pos": [
+        1100,
+        300
+      ],
+      "size": [
+        210,
+        46
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": {
+        "min_resolution": 576,
+        "duration": 150,
+        "expand_ratio": 1,
+        "clip_vision": [
+          "32",
+          1
+        ],
+        "vae": [
+          "32",
+          2
+        ],
+        "audio": [
+          "26",
+          0
+        ],
+        "image": [
+          "8",
+          0
+        ],
+        "weight_dtype": [
+          "34",
+          1
+        ]
+      },
+      "outputs": [
+        {
+          "name": "DATA",
+          "type": "DATA",
+          "slot_index": 0,
+          "links": [
+            204
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.29",
+        "Node name for S&R": "SONIC_PreData"
+      },
+      "widgets_values": [],
+      "_meta": {
+        "title": "SONIC_PreData"
+      }
+    },
+    {
+      "id": 34,
+      "type": "SONICTLoader",
+      "pos": [
+        950,
+        400
+      ],
+      "size": [
+        210,
+        46
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": {
+        "sonic_unet": "unet.pth",
+        "ip_audio_scale": 1,
+        "use_interframe": true,
+        "dtype": "bf16",
+        "model": [
+          "32",
+          0
+        ]
+      },
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            205
+          ]
+        },
+        {
+          "name": "WEIGHT_DTYPE",
+          "type": "WEIGHT_DTYPE",
+          "slot_index": 1,
+          "links": [
+            206
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.29",
+        "Node name for S&R": "SONICTLoader"
+      },
+      "widgets_values": [],
+      "_meta": {
+        "title": "SONICTLoader"
+      }
     }
   ],
   "links": [
@@ -540,6 +933,94 @@
       82,
       3,
       "LATENT"
+    ],
+    [
+      200,
+      26,
+      0,
+      33,
+      5,
+      "AUDIO"
+    ],
+    [
+      201,
+      32,
+      0,
+      34,
+      4,
+      "MODEL"
+    ],
+    [
+      202,
+      32,
+      1,
+      33,
+      2,
+      "CLIP_VISION"
+    ],
+    [
+      203,
+      32,
+      2,
+      33,
+      3,
+      "VAE"
+    ],
+    [
+      204,
+      33,
+      0,
+      31,
+      5,
+      "DATA_DICT"
+    ],
+    [
+      205,
+      34,
+      0,
+      31,
+      4,
+      "MODEL"
+    ],
+    [
+      206,
+      34,
+      1,
+      33,
+      6,
+      "WEIGHT_DTYPE"
+    ],
+    [
+      207,
+      8,
+      0,
+      33,
+      4,
+      "IMAGE"
+    ],
+    [
+      208,
+      31,
+      0,
+      13,
+      10,
+      "IMAGES"
+    ],
+    [
+      209,
+      26,
+      0,
+      13,
+      11,
+      "AUDIO"
+    ],
+    [
+      210,
+      31,
+      1,
+      13,
+      0,
+      "frame_rate"
     ]
   ],
   "groups": [],

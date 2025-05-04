@@ -132,6 +132,30 @@ class ComfyUIClient:
                 
                 logger.info(f"📐 Updated Image Resize dimensions from {original_width}x{original_height} to {optimal_width}x{optimal_height}")
             
+            # Update ImageResize+ node
+            if node.get("class_type") == "ImageResize+":
+                # Save original dimensions for logging
+                original_width = node["inputs"].get("width", 576)
+                original_height = node["inputs"].get("height", 576)
+                
+                # Update with optimal dimensions
+                node["inputs"]["width"] = optimal_width
+                node["inputs"]["height"] = optimal_height
+                
+                logger.info(f"📐 Updated ImageResize+ dimensions from {original_width}x{original_height} to {optimal_width}x{optimal_height}")
+            
+            # Update ImageScale node
+            if node.get("class_type") == "ImageScale":
+                # Save original dimensions for logging
+                original_width = node["inputs"].get("width", 576)
+                original_height = node["inputs"].get("height", 576)
+                
+                # Update with optimal dimensions
+                node["inputs"]["width"] = optimal_width
+                node["inputs"]["height"] = optimal_height
+                
+                logger.info(f"📐 Updated ImageScale dimensions from {original_width}x{original_height} to {optimal_width}x{optimal_height}")
+            
             # Update the LoadAudio or VHS_LoadAudio node with the audio path
             if node.get("class_type") in ["LoadAudio", "VHS_LoadAudio"]:
                 # Handle different node structures

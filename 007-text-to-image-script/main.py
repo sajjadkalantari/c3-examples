@@ -4,6 +4,7 @@
 
 This script generates images from text prompts using ComfyUI through the Comput3 platform.
 It leverages a powerful text-to-image model to create high-quality images based on your descriptions.
+Now with video generation capability using the SONIC model for talking portrait videos.
 """
 
 import os

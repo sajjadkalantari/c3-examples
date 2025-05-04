@@ -154,7 +154,7 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "fp8_fast seems to cause huge quality degradation\n\nfp_16_fast enables \"Full FP16 Accmumulation in FP16 GEMMs\" feature available in the very latest pytorch nightly, this is around 20% speed boost. \n\nSageattn if you have it installed can be used for almost double inference speed"
+        "fp8_fast seems to cause huge quality degradation\n\nfp_16_fast enables \"Full FP16 Accumulation in FP16 GEMMs\" feature available in the very latest pytorch nightly, this is around 20% speed boost. \n\nSageattn if you have it installed can be used for almost double inference speed"
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -254,7 +254,7 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "TeaCache could be considered to be sort of an automated step skipper \n\nThe relative l1 threshold -value determines how aggressive this is, higher values are faster but quality suffers more. Very first steps should NEVER be skipped with this model or it kills the motion. When using the pre-calculated coefficients, the treshold value should be much higher than with the default coefficients."
+        "TeaCache could be considered to be sort of an automated step skipper \n\nThe relative l1 threshold -value determines how aggressive this is, higher values are faster but quality suffers more. Very first steps should NEVER be skipped with this model or it kills the motion. When using the pre-calculated coefficients, the threshold value should be much higher than with the default coefficients."
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -490,7 +490,7 @@
             "format": "video/h264-mp4",
             "frame_rate": 16,
             "workflow": "WanVideo2_1_T2V_00255.png",
-            "fullpath": "N:\\AI\\ComfyUI\\output\\WanVideo2_1_T2V_00255.mp4"
+            "fullpath": "ComfyUI/output/WanVideo2_1_T2V_00255.mp4"
           }
         }
       }
@@ -538,8 +538,8 @@
         "Node name for S&R": "WanVideoTextEncode"
       },
       "widgets_values": [
-        "high quality nature video featuring a red panda balancing on a bamboo stem while a bird lands on it's head, on the background there is a waterfall",
-        "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+        "high quality nature video featuring a red panda balancing on a bamboo stem while a bird lands on its head, on the background there is a waterfall",
+        "poor quality, blurry, pixelated, low resolution, watermark, signature, text, letters, words",
         true
       ],
       "color": "#332922",
@@ -926,4 +926,4 @@
     "VHS_KeepIntermediate": true
   },
   "version": 0.4
-}
+} 

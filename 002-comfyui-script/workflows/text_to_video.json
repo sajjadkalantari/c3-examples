@@ -6,7 +6,7 @@
         1
       ],
       "loop_count": 0,
-      "filename_prefix": "Video",
+      "filename_prefix": "TextToVideo",
       "format": "video/h264-mp4",
       "pix_fmt": "yuv420p",
       "crf": 19,
@@ -30,11 +30,11 @@
   },
   "18": {
     "inputs": {
-      "image": "comput3ai.png"
+      "image": "init_image.png"
     },
     "class_type": "LoadImage",
     "_meta": {
-      "title": "Load a portrait Image (Face Closeup)"
+      "title": "Load Initial Image (Optional)"
     }
   },
   "21": {
@@ -51,7 +51,7 @@
   },
   "26": {
     "inputs": {
-      "audio": "welcome.flac"
+      "audio": "audio_input.mp3"
     },
     "class_type": "LoadAudio",
     "_meta": {
@@ -90,7 +90,7 @@
   "33": {
     "inputs": {
       "min_resolution": 576,
-      "duration": 150,
+      "duration": 9,
       "expand_ratio": 1,
       "clip_vision": [
         "32",
@@ -136,9 +136,9 @@
   },
   "58": {
     "inputs": {
-      "width": 300,
-      "height": 300,
-      "interpolation": "nearest",
+      "width": 576,
+      "height": 576,
+      "interpolation": "lanczos",
       "method": "stretch",
       "condition": "always",
       "multiple_of": 0,
@@ -152,4 +152,4 @@
       "title": "🔧 Image Resize"
     }
   }
-}
+} 

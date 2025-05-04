@@ -62,6 +62,8 @@ class ComfyUIClient:
         negative_node = None
         sampler_node = None
         latent_node = None
+        sonic_sampler_node = None
+        load_audio_node = None
         
         for node in updated_workflow["nodes"]:
             # Identify nodes by their type and title
@@ -73,6 +75,10 @@ class ComfyUIClient:
                 sampler_node = node
             elif node["type"] == "EmptySD3LatentImage":
                 latent_node = node
+            elif node["type"] == "SONICSampler":
+                sonic_sampler_node = node
+            elif node["type"] == "LoadAudio":
+                load_audio_node = node
         
         # Update the prompts and parameters
         if positive_node and "widgets_values" in positive_node:
@@ -93,6 +99,17 @@ class ComfyUIClient:
             latent_node["widgets_values"][0] = width
             latent_node["widgets_values"][1] = height
             logger.info(f"📐 Updated image dimensions to {width}x{height}")
+        
+        # Update SONIC sampler parameters if present
+        if sonic_sampler_node:
+            if seed is not None:
+                if "inputs" in sonic_sampler_node and "seed" in sonic_sampler_node["inputs"]:
+                    sonic_sampler_node["inputs"]["seed"] = seed
+                    logger.info(f"⚙️ Updated SONIC sampler seed to {seed}")
+            
+            if "inputs" in sonic_sampler_node and "inference_steps" in sonic_sampler_node["inputs"]:
+                sonic_sampler_node["inputs"]["inference_steps"] = steps
+                logger.info(f"⚙️ Updated SONIC sampler steps to {steps}")
         
         return updated_workflow
     
