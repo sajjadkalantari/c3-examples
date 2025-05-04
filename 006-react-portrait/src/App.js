@@ -10,6 +10,7 @@ import CSMGenerator from './components/CSMGenerator';
 import WhisperTranscriber from './components/WhisperTranscriber';
 import TextToImageGenerator from './components/TextToImageGenerator';
 import TextToVideoGenerator from './components/TextToVideoGenerator';
+import ImageToImageGenerator from './components/ImageToImageGenerator';
 
 function App() {
   const [apiKey, setApiKey] = useState('');
@@ -99,6 +100,25 @@ function App() {
     </div>
   );
 
+  const ImageToImagePage = () => (
+    <div className="bg-gray-100 min-h-screen">
+      <Navbar />
+      <div className="max-w-7xl mx-auto px-4 py-5 pt-16">
+        <BackButton />
+        <main className="py-5">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <StoredApiKey onChange={handleApiKeyChange} />
+            <div className="text-center mb-8 pb-5 border-b border-gray-200">
+              <h1 className="text-3xl font-bold text-gray-800 mb-2">Image to Image Generator</h1>
+              <p className="text-gray-600 text-lg">Transform your images using AI with ComfyUI</p>
+            </div>
+            <ImageToImageGenerator apiKey={apiKey} />
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+
   return (
     <Router>
       <Routes>
@@ -108,6 +128,7 @@ function App() {
         <Route path="/whisper" element={<WhisperPage />} />
         <Route path="/text-to-image" element={<TextToImagePage />} />
         <Route path="/text-to-video" element={<TextToVideoPage />} />
+        <Route path="/image-to-image" element={<ImageToImagePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

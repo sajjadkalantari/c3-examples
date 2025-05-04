@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaHeadphones, FaMicrophone, FaVideo, FaImage, FaFilm } from 'react-icons/fa';
+import { FaHeadphones, FaMicrophone, FaVideo, FaImage, FaFilm, FaExchangeAlt } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import Navbar from './Navbar';
 
@@ -36,7 +36,7 @@ const LandingPage = () => {
         </div>
 
         {/* Feature Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-8 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 max-w-7xl mx-auto">
           {/* Portrait Generation Card */}
           <div 
             className="group bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-xl overflow-hidden shadow-lg border border-gray-700 transform transition duration-300 hover:scale-105 hover:shadow-2xl cursor-pointer"
@@ -86,6 +86,33 @@ const LandingPage = () => {
                 </span>
                 <span className="inline-block bg-amber-900 bg-opacity-50 rounded-full px-3 py-1 text-sm text-amber-300">
                   #AIArt
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Image to Image Card */}
+          <div 
+            className="group bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-xl overflow-hidden shadow-lg border border-gray-700 transform transition duration-300 hover:scale-105 hover:shadow-2xl cursor-pointer"
+            onClick={() => navigate('/image-to-image')}
+          >
+            <div className="h-48 bg-gradient-to-br from-green-400 to-teal-600 flex items-center justify-center p-4 relative overflow-hidden">
+              <div className="absolute inset-0 opacity-30">
+                <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern"></div>
+              </div>
+              <FaExchangeAlt className="w-32 h-32 text-white relative z-10" />
+            </div>
+            <div className="p-6">
+              <h3 className="text-2xl font-bold mb-2 text-green-400 group-hover:text-green-300">Image to Image</h3>
+              <p className="text-gray-300">
+                Transform and enhance your images with our AI-powered image-to-image generation.
+              </p>
+              <div className="mt-4">
+                <span className="inline-block bg-green-900 bg-opacity-50 rounded-full px-3 py-1 text-sm text-green-300 mr-2">
+                  #ImageTransform
+                </span>
+                <span className="inline-block bg-green-900 bg-opacity-50 rounded-full px-3 py-1 text-sm text-green-300">
+                  #AIEditor
                 </span>
               </div>
             </div>
