@@ -1,8 +1,105 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ComfyUIClient from '../services/comfyuiClient';
 import Comput3API from '../services/comput3Api';
 import config from '../services/config';
 import { v4 as uuidv4 } from 'uuid';
+
+// Helper to set API key as a cookie for authentication
+const setApiKeyCookie = (apiKey) => {
+  if (!apiKey) return;
+  
+  // Set cookie with apiKey that expires in 1 day
+  const expires = new Date();
+  expires.setDate(expires.getDate() + 1);
+  document.cookie = `c3_api_key=${apiKey}; expires=${expires.toUTCString()}; path=/`;
+  console.log('Set c3_api_key cookie for authentication');
+};
+
+// Helper to ensure direct URLs are not proxied (for copy/paste purposes)
+const getDirectImageUrl = (url) => {
+  if (!url) return '';
+  
+  // Remove proxy prefix if it exists
+  const PROXY_URL = 'http://localhost:8080/';
+  if (url.startsWith(PROXY_URL)) {
+    return url.substring(PROXY_URL.length);
+  }
+  
+  return url;
+};
+
+// For use in fetch requests only, not in src attributes
+const getProxiedUrlForFetch = (url) => {
+  if (!url) return '';
+  
+  const PROXY_URL = 'http://localhost:8080/';
+  
+  // If the URL is already a full URL and not already proxied, add the proxy
+  if (url.startsWith('http') && !url.startsWith(PROXY_URL)) {
+    console.log('Adding proxy to URL for fetch request:', url);
+    return PROXY_URL + url;
+  }
+  
+  return url;
+};
+
+// Generic two-step approach to prepare image viewing - doesn't depend on component state
+const prepareImageForViewing = (imageUrl) => {
+  if (!imageUrl) return Promise.resolve('');
+  
+  const directUrl = getDirectImageUrl(imageUrl);
+  const proxiedUrl = getProxiedUrlForFetch(directUrl);
+  
+  console.log('Preparing image for viewing...');
+  console.log('Direct URL:', directUrl);
+  console.log('Proxied URL:', proxiedUrl);
+  
+  // Step 1: First make a request through the proxy to set up cookies/session
+  return fetch(proxiedUrl, {
+    headers: {
+      'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      'accept-language': 'en-US,en;q=0.9',
+      'cache-control': 'max-age=0',
+      'sec-fetch-dest': 'document',
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-site': 'none',
+      'sec-fetch-user': '?1',
+      'upgrade-insecure-requests': '1',
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+    },
+    credentials: 'include'
+  })
+  .then(response => {
+    console.log('Proxy request completed with status:', response.status);
+    // Step 2: Now the direct URL should work
+    return directUrl;
+  })
+  .catch(error => {
+    console.error('Error in proxy request:', error);
+    return directUrl; // Return direct URL anyway to try
+  });
+};
+
+// Generic helper to store image in localStorage - doesn't depend on component state
+const storeImageInLocalStorage = (imgElement, filename) => {
+  if (!filename || !imgElement) return;
+  
+  try {
+    // Create a canvas to draw the image
+    const canvas = document.createElement('canvas');
+    canvas.width = imgElement.width;
+    canvas.height = imgElement.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imgElement, 0, 0);
+    
+    // Convert to base64
+    const dataUrl = canvas.toDataURL('image/png');
+    localStorage.setItem(`img_${filename}`, dataUrl);
+    console.log('Stored image in localStorage');
+  } catch (e) {
+    console.error('Failed to store image in localStorage:', e);
+  }
+};
 
 const TextToImageGenerator = ({ apiKey }) => {
   const [prompt, setPrompt] = useState('');
@@ -18,6 +115,9 @@ const TextToImageGenerator = ({ apiKey }) => {
   const [error, setError] = useState('');
   const [debug, setDebug] = useState(false);
   const [workflowData, setWorkflowData] = useState(null);
+  const [imageBlobUrl, setImageBlobUrl] = useState('');
+  const [directUrlCopied, setDirectUrlCopied] = useState(false);
+  const directUrlRef = useRef(null);
 
   useEffect(() => {
     // Get a random seed if not provided
@@ -28,6 +128,11 @@ const TextToImageGenerator = ({ apiKey }) => {
   }, [seed]);
 
   useEffect(() => {
+    // Set API key as cookie for authentication when fetching images
+    if (apiKey) {
+      setApiKeyCookie(apiKey);
+    }
+    
     const checkComfyuiUrl = async () => {
       if (apiKey) {
         try {
@@ -137,8 +242,11 @@ const TextToImageGenerator = ({ apiKey }) => {
         throw new Error('No output files found');
       }
       
+      console.log('Output files:', outputFiles);
+      
       // Filter for images
       const images = outputFiles.filter(f => f.type === 'image');
+      console.log('Image files:', images);
       
       if (images.length === 0) {
         throw new Error('No images found in output');
@@ -146,14 +254,24 @@ const TextToImageGenerator = ({ apiKey }) => {
       
       // Get the most recent image (usually from node 9)
       const node9Images = images.filter(img => img.node_id === '9');
+      console.log('Node 9 images:', node9Images);
+      
       const targetImage = node9Images.length > 0 ? node9Images[node9Images.length - 1] : images[0];
+      console.log('Selected target image:', targetImage);
       
       // Get image URL
       const imageUrl = comfyClient.getImageUrl(targetImage.filename, targetImage.subfolder);
+      console.log('Final image URL:', imageUrl);
+      
+      // Also try a direct URL format in case the standard one doesn't work
+      const directImageUrl = `${comfyClient.originalServerUrl}/output/${targetImage.filename}`;
+      console.log('Alternative direct URL:', directImageUrl);
       
       setStatusMessage('Done!');
       setResult({
         imageUrl,
+        directImageUrl,
+        originalFilename: targetImage.filename,
         prompt,
         negativePrompt,
         seed: seedValue,
@@ -201,6 +319,619 @@ const TextToImageGenerator = ({ apiKey }) => {
 
   const toggleDebug = () => {
     setDebug(!debug);
+  };
+
+  // Function to load the image with proper headers
+  const loadImageWithHeaders = (imageUrl) => {
+    if (!imageUrl) return;
+    
+    prepareImageForViewing(imageUrl)
+      .then(preparedUrl => {
+        // Now create an image element with the direct URL
+        console.log('Loading prepared URL:', preparedUrl);
+        
+        // Create a new image element to test loading
+        const testImg = new Image();
+        
+        testImg.onload = () => {
+          console.log('Image loaded successfully');
+          setImageBlobUrl(preparedUrl);
+          
+          // Also store in localStorage as backup
+          if (result && result.originalFilename) {
+            storeImageInLocalStorage(testImg, result.originalFilename);
+          }
+        };
+        
+        testImg.onerror = () => {
+          console.error('Direct image loading failed, falling back to fetch with blob URL');
+          
+          // Fall back to fetching as blob
+          fetch(preparedUrl, {
+            headers: {
+              'accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+              'accept-language': 'en-US,en;q=0.9',
+              'sec-fetch-dest': 'image',
+              'sec-fetch-mode': 'no-cors',
+              'sec-fetch-site': 'same-origin'
+            },
+            credentials: 'include'
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`Failed to load image: ${response.status} ${response.statusText}`);
+            }
+            return response.blob();
+          })
+          .then(blob => {
+            const objectUrl = URL.createObjectURL(blob);
+            setImageBlobUrl(objectUrl);
+            console.log('Created blob URL for image:', objectUrl);
+            
+            // Save the blob to localStorage for future use
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+              const base64data = reader.result;
+              try {
+                // Store the image in localStorage with the filename as key
+                if (result && result.originalFilename) {
+                  localStorage.setItem(`img_${result.originalFilename}`, base64data);
+                  console.log('Saved image to localStorage');
+                }
+              } catch (e) {
+                console.error('Failed to save image to localStorage:', e);
+              }
+            };
+          })
+          .catch(error => {
+            console.error('Error fetching image:', error);
+            
+            // Try to load from localStorage if available
+            if (result && result.originalFilename) {
+              const savedImage = localStorage.getItem(`img_${result.originalFilename}`);
+              if (savedImage) {
+                console.log('Loading image from localStorage');
+                setImageBlobUrl(savedImage);
+                return;
+              }
+            }
+            
+            // Try the alternative URL if the first one fails
+            if (imageUrl === result.imageUrl && result.directImageUrl) {
+              console.log('Primary image URL failed, trying alternative URL');
+              loadImageWithHeaders(result.directImageUrl);
+            }
+          });
+        };
+        
+        // Set the source to start loading
+        testImg.src = preparedUrl;
+      });
+  };
+
+  // Function to download the image directly
+  const downloadImage = () => {
+    if (!result || !result.imageUrl) return;
+    
+    const directUrl = getDirectImageUrl(result.imageUrl);
+    
+    // First prepare by accessing through proxy
+    prepareImageForViewing(result.imageUrl)
+      .then(() => {
+        // Then try direct download
+        fetch(directUrl, {
+          headers: {
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'accept-language': 'en-US,en;q=0.9',
+            'cache-control': 'max-age=0',
+            'sec-fetch-dest': 'document',
+            'sec-fetch-mode': 'navigate',
+            'sec-fetch-site': 'none',
+            'sec-fetch-user': '?1',
+            'upgrade-insecure-requests': '1',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+          },
+          credentials: 'include'
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+          }
+          return response.blob();
+        })
+        .then(blob => {
+          // Create a download link and trigger it
+          const downloadUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.download = result.originalFilename || 'generated-image.png';
+          document.body.appendChild(a);
+          a.click();
+          
+          // Clean up after download
+          setTimeout(() => {
+            URL.revokeObjectURL(downloadUrl);
+            document.body.removeChild(a);
+          }, 100);
+          
+          // Also save to localStorage
+          const reader = new FileReader();
+          reader.readAsDataURL(blob);
+          reader.onloadend = () => {
+            const base64data = reader.result;
+            try {
+              if (result && result.originalFilename) {
+                localStorage.setItem(`img_${result.originalFilename}`, base64data);
+                console.log('Saved downloaded image to localStorage');
+              }
+            } catch (e) {
+              console.error('Failed to save image to localStorage:', e);
+            }
+          };
+        })
+        .catch(error => {
+          console.error('Error downloading image:', error);
+          alert('Failed to download image. Please try again.');
+        });
+      });
+  };
+
+  // Direct image loading fallback
+  const displayDownloadInstructions = () => {
+    if (!result || !result.imageUrl) return;
+    
+    const directUrl = getDirectImageUrl(result.imageUrl);
+    
+    setError(
+      <div>
+        <p>Unable to load the image directly. Please try one of these options:</p>
+        <ol className="list-decimal pl-5 my-2">
+          <li>Click the "Download Image Directly" button below</li>
+          <li>
+            <a 
+              href={directUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 underline"
+            >
+              Open image in a new tab
+            </a> and save it from there
+          </li>
+          <li>Try using the "View Image in New Tab" option which provides more download options</li>
+        </ol>
+      </div>
+    );
+  };
+
+  // Load the image when the result changes
+  useEffect(() => {
+    if (result && result.imageUrl) {
+      // Clear any previous errors
+      setError('');
+      
+      // Try to load the image
+      loadImageWithHeaders(result.imageUrl);
+      
+      // If the image fails to load after 5 seconds, show download instructions
+      const timer = setTimeout(() => {
+        if (!imageBlobUrl) {
+          displayDownloadInstructions();
+        }
+      }, 5000);
+      
+      return () => {
+        clearTimeout(timer);
+        if (imageBlobUrl) {
+          URL.revokeObjectURL(imageBlobUrl);
+        }
+      };
+    }
+  }, [result, imageBlobUrl]);
+
+  // Debug image function - create a standalone HTML page to show the image
+  const handleImageDisplay = () => {
+    if (!result || !result.imageUrl) return;
+    
+    const directUrl = getDirectImageUrl(result.imageUrl);
+    const proxiedUrl = getProxiedUrlForFetch(directUrl);
+    
+    // Check if we already have this image in localStorage
+    let savedImageData = null;
+    if (result.originalFilename) {
+      savedImageData = localStorage.getItem(`img_${result.originalFilename}`);
+    }
+    
+    // Open a new window with the direct URL embedded in HTML
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(`
+        <html>
+          <head>
+            <title>Image - ${result.originalFilename || 'Generated Image'}</title>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+              }
+              .image-container {
+                display: flex;
+                justify-content: center;
+                margin: 20px 0;
+              }
+              img {
+                max-width: 100%;
+                height: auto;
+                border-radius: 5px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+              }
+              .info {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 5px;
+                margin-top: 20px;
+              }
+              .url-container {
+                display: flex;
+                margin: 10px 0;
+              }
+              input {
+                flex-grow: 1;
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 14px;
+              }
+              button {
+                margin-left: 5px;
+                padding: 8px 15px;
+                background: #4299e1;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+              }
+              h2 {
+                margin-top: 30px;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 10px;
+              }
+              .error {
+                color: #e53e3e;
+                margin-top: 10px;
+                padding: 10px;
+                background-color: #fff5f5;
+                border-radius: 4px;
+              }
+              .download-btn {
+                margin-top: 20px;
+                padding: 12px 20px;
+                font-size: 16px;
+                background: #38a169;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                display: block;
+                width: 100%;
+                max-width: 300px;
+                margin-left: auto;
+                margin-right: auto;
+              }
+              .loading {
+                text-align: center;
+                padding: 40px;
+                font-style: italic;
+                color: #718096;
+              }
+              .fallback-container {
+                display: none;
+                margin-top: 20px;
+              }
+              .step-display {
+                margin: 10px 0;
+                padding: 10px;
+                background-color: #edf2f7;
+                border-radius: 4px;
+                font-size: 14px;
+              }
+              .two-step-note {
+                background-color: #e6fffa;
+                padding: 10px;
+                border-radius: 4px;
+                margin-top: 15px;
+                font-size: 14px;
+                border-left: 4px solid #38b2ac;
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Generated Image</h1>
+            
+            <div class="loading" id="loading-message">
+              Loading image using two-step approach...
+            </div>
+            
+            <div class="image-container" style="display:none" id="image-container">
+              <img 
+                id="main-image"
+                alt="Generated image"
+              />
+            </div>
+            
+            <div id="fallback-container" class="fallback-container">
+              <h2>Using Cached Image</h2>
+              <p>The direct image URL could not be loaded. Displaying the cached version of the image instead.</p>
+              ${savedImageData ? `<img id="fallback-image" src="${savedImageData}" alt="Cached version of generated image" />` : ''}
+            </div>
+            
+            <div class="step-display" id="step-display">
+              Step 1: Preparing image through proxy...
+            </div>
+            
+            <button class="download-btn" onclick="downloadImage()">Download Image</button>
+            
+            <div class="two-step-note">
+              <strong>Note:</strong> This image is loaded using a two-step process:
+              <ol>
+                <li>First, we access the image through a proxy: <code>${proxiedUrl}</code></li>
+                <li>Then, we can access the direct URL: <code>${directUrl}</code></li>
+              </ol>
+            </div>
+            
+            <h2>Direct Image URL</h2>
+            <p>Copy this URL to use outside of the app:</p>
+            <div class="url-container">
+              <input type="text" value="${directUrl}" id="direct-url" readonly>
+              <button onclick="copyUrl()">Copy</button>
+            </div>
+            
+            <div class="info">
+              <h2>Image Details</h2>
+              <p><b>Prompt:</b> ${result.prompt}</p>
+              <p><b>Negative Prompt:</b> ${result.negativePrompt}</p>
+              <p><b>Size:</b> ${result.width}x${result.height}</p>
+              <p><b>Steps:</b> ${result.steps}</p>
+              <p><b>Seed:</b> ${result.seed}</p>
+              <p><b>Filename:</b> ${result.originalFilename || 'Unknown'}</p>
+            </div>
+            
+            <script>
+              // Set API key as cookie in this window as well
+              document.cookie = "c3_api_key=${apiKey}; path=/";
+              
+              // Store the saved image data if available
+              const savedImageData = ${savedImageData ? `"${savedImageData}"` : 'null'};
+              const proxiedUrl = "${proxiedUrl}";
+              const directUrl = "${directUrl}";
+              const originalFilename = "${result.originalFilename || 'generated-image.png'}";
+              
+              function copyUrl() {
+                const urlInput = document.getElementById('direct-url');
+                urlInput.select();
+                document.execCommand('copy');
+                const button = document.querySelector('.url-container button');
+                button.textContent = 'Copied!';
+                setTimeout(() => {
+                  button.textContent = 'Copy';
+                }, 2000);
+              }
+              
+              // Two-step approach to load the image
+              async function loadImageWithTwoSteps() {
+                const stepDisplay = document.getElementById('step-display');
+                const loadingMessage = document.getElementById('loading-message');
+                const imageContainer = document.getElementById('image-container');
+                const mainImage = document.getElementById('main-image');
+                
+                // Step 1: First make a request through the proxy to set up cookies/session
+                stepDisplay.textContent = "Step 1: Accessing through proxy...";
+                try {
+                  const proxyResponse = await fetch(proxiedUrl, {
+                    headers: {
+                      'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                      'accept-language': 'en-US,en;q=0.9',
+                      'cache-control': 'max-age=0',
+                      'sec-fetch-dest': 'document',
+                      'sec-fetch-mode': 'navigate',
+                      'sec-fetch-site': 'none',
+                      'sec-fetch-user': '?1',
+                      'upgrade-insecure-requests': '1',
+                      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+                    },
+                    credentials: 'include'
+                  });
+                  
+                  stepDisplay.textContent = "Step 2: Accessing direct URL...";
+                  
+                  // If we have saved image data, use it as a fallback
+                  if (savedImageData) {
+                    mainImage.onerror = function() {
+                      console.error('Direct image loading failed, using cached version');
+                      document.getElementById('fallback-container').style.display = 'block';
+                    };
+                  }
+                  
+                  // Now try to load the direct URL
+                  mainImage.onload = function() {
+                    console.log('Image loaded successfully');
+                    loadingMessage.style.display = 'none';
+                    imageContainer.style.display = 'flex';
+                    stepDisplay.textContent = "Image loaded successfully!";
+                  };
+                  
+                  // Set the source to the direct URL
+                  mainImage.src = directUrl;
+                } catch (error) {
+                  console.error('Error in two-step loading:', error);
+                  stepDisplay.textContent = "Error loading image through proxy. Trying alternate methods...";
+                  
+                  if (savedImageData) {
+                    // Use saved image data
+                    document.getElementById('fallback-container').style.display = 'block';
+                  } else {
+                    // Try direct fetch
+                    handleImageError();
+                  }
+                }
+              }
+              
+              function handleImageError() {
+                const mainImage = document.getElementById('main-image');
+                const imageContainer = document.getElementById('image-container');
+                const loadingMessage = document.getElementById('loading-message');
+                const stepDisplay = document.getElementById('step-display');
+                const fallbackContainer = document.getElementById('fallback-container');
+                
+                stepDisplay.textContent = "Direct loading failed. Trying fetch with blob...";
+                
+                // If we have a saved image, show it
+                if (savedImageData) {
+                  fallbackContainer.style.display = 'block';
+                  loadingMessage.style.display = 'none';
+                  return;
+                }
+                
+                // Try to load the image using fetch with credentials
+                fetch(directUrl, {
+                  headers: {
+                    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                    'accept-language': 'en-US,en;q=0.9',
+                    'cache-control': 'max-age=0',
+                    'sec-fetch-dest': 'document',
+                    'sec-fetch-mode': 'navigate',
+                    'sec-fetch-site': 'none',
+                    'sec-fetch-user': '?1',
+                    'upgrade-insecure-requests': '1',
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+                  },
+                  credentials: 'include'
+                })
+                .then(response => response.blob())
+                .then(blob => {
+                  const objectUrl = URL.createObjectURL(blob);
+                  mainImage.src = objectUrl;
+                  imageContainer.style.display = 'flex';
+                  loadingMessage.style.display = 'none';
+                  stepDisplay.textContent = "Image loaded via blob URL!";
+                  
+                  // Save this image data to window variables for download
+                  window.imageBlob = blob;
+                  window.imageObjectUrl = objectUrl;
+                })
+                .catch(error => {
+                  console.error('Error fetching image:', error);
+                  stepDisplay.textContent = "All image loading methods failed. Please try downloading the image.";
+                  loadingMessage.textContent = "Unable to display image. Try downloading instead.";
+                });
+              }
+              
+              function downloadImage() {
+                // If we have the image blob already, use it
+                if (window.imageBlob) {
+                  const a = document.createElement('a');
+                  a.href = window.imageObjectUrl;
+                  a.download = originalFilename;
+                  a.click();
+                  return;
+                }
+                
+                // If we have the fallback image, use that
+                if (savedImageData) {
+                  const a = document.createElement('a');
+                  a.href = savedImageData;
+                  a.download = originalFilename;
+                  a.click();
+                  return;
+                }
+                
+                // Otherwise, try to fetch and download the image using the two-step approach
+                fetch(proxiedUrl, {
+                  headers: {
+                    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                    'accept-language': 'en-US,en;q=0.9',
+                    'cache-control': 'max-age=0',
+                    'sec-fetch-dest': 'document',
+                    'sec-fetch-mode': 'navigate',
+                    'sec-fetch-site': 'none',
+                    'sec-fetch-user': '?1',
+                    'upgrade-insecure-requests': '1',
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+                  },
+                  credentials: 'include'
+                })
+                .then(response => {
+                  // After proxy request, try direct URL
+                  return fetch(directUrl, {
+                    headers: {
+                      'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                      'accept-language': 'en-US,en;q=0.9',
+                      'cache-control': 'max-age=0',
+                      'sec-fetch-dest': 'document',
+                      'sec-fetch-mode': 'navigate',
+                      'sec-fetch-site': 'none',
+                      'sec-fetch-user': '?1',
+                      'upgrade-insecure-requests': '1',
+                      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+                    },
+                    credentials: 'include'
+                  });
+                })
+                .then(response => {
+                  if (!response.ok) {
+                    throw new Error('Failed to download image');
+                  }
+                  return response.blob();
+                })
+                .then(blob => {
+                  // Create download link
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = originalFilename;
+                  document.body.appendChild(a);
+                  a.click();
+                  
+                  // Clean up
+                  setTimeout(() => {
+                    URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                  }, 100);
+                  
+                  // Also display the image if it wasn't displayed before
+                  if (!document.getElementById('main-image').src) {
+                    document.getElementById('main-image').src = url;
+                    document.getElementById('image-container').style.display = 'flex';
+                    document.getElementById('loading-message').style.display = 'none';
+                    document.getElementById('step-display').textContent = "Image loaded from download!";
+                  }
+                })
+                .catch(error => {
+                  alert('Failed to download image. Please try again.');
+                  console.error(error);
+                });
+              }
+              
+              // Start loading the image when the page loads
+              window.onload = loadImageWithTwoSteps;
+            </script>
+          </body>
+        </html>
+      `);
+      win.document.close();
+    }
+  };
+
+  // Function to copy the direct URL to clipboard
+  const copyDirectUrl = () => {
+    if (directUrlRef.current) {
+      directUrlRef.current.select();
+      document.execCommand('copy');
+      setDirectUrlCopied(true);
+      setTimeout(() => setDirectUrlCopied(false), 2000);
+    }
   };
 
   return (
@@ -393,11 +1124,41 @@ const TextToImageGenerator = ({ apiKey }) => {
         <div className="mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Generated Image</h3>
           <div className="flex flex-col items-center">
-            <img 
-              src={result.imageUrl} 
-              alt="Generated image" 
-              className="max-w-full h-auto rounded shadow-lg mb-4" 
-            />
+            {imageBlobUrl ? (
+              <img 
+                src={imageBlobUrl} 
+                alt="Generated image" 
+                className="max-w-full h-auto rounded shadow-lg mb-4" 
+              />
+            ) : (
+              <div className="w-full h-64 flex items-center justify-center bg-gray-200 rounded-lg mb-4">
+                <p className="text-gray-600">Loading image...</p>
+              </div>
+            )}
+            
+            {/* Direct URL field for copy/paste */}
+            <div className="w-full mb-4">
+              <p className="text-sm font-medium text-gray-700 mb-1">Direct Image URL:</p>
+              <div className="flex">
+                <input
+                  ref={directUrlRef}
+                  type="text"
+                  readOnly
+                  value={getDirectImageUrl(result.imageUrl)}
+                  className="flex-grow shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-l-md"
+                />
+                <button
+                  onClick={copyDirectUrl}
+                  className="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-r-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  {directUrlCopied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                This direct URL requires authentication with your API key. Use "View in New Tab" to see the image in a new window, or add a cookie named "c3_api_key" with your API key as value.
+              </p>
+            </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full text-sm text-gray-600">
               <div>
                 <p><span className="font-semibold">Prompt:</span> {result.prompt}</p>
@@ -409,6 +1170,49 @@ const TextToImageGenerator = ({ apiKey }) => {
                 <p><span className="font-semibold">Seed:</span> {result.seed}</p>
               </div>
             </div>
+            
+            <div className="mt-4 flex space-x-4">
+              <button
+                onClick={handleImageDisplay}
+                className="text-blue-600 hover:text-blue-800 text-sm underline"
+              >
+                View Image in New Tab
+              </button>
+              <a 
+                href={imageBlobUrl} 
+                download={result.originalFilename || 'generated-image.png'}
+                className="text-blue-600 hover:text-blue-800 text-sm underline"
+              >
+                Download Image via Blob URL
+              </a>
+              <button
+                onClick={downloadImage}
+                className="text-blue-600 hover:text-blue-800 text-sm underline"
+              >
+                Download Image Directly
+              </button>
+            </div>
+            
+            {debug && (
+              <div className="mt-4 w-full">
+                <p className="text-sm font-semibold">Image URLs:</p>
+                <p className="text-xs break-all"><span className="font-semibold">API URL:</span> {result.imageUrl}</p>
+                <p className="text-xs break-all"><span className="font-semibold">Direct URL:</span> {getDirectImageUrl(result.imageUrl)}</p>
+                <p className="text-xs break-all"><span className="font-semibold">Alternate URL:</span> {result.directImageUrl}</p>
+                <p className="text-xs break-all"><span className="font-semibold">Original Filename:</span> {result.originalFilename}</p>
+                <p className="text-xs break-all"><span className="font-semibold">Blob URL:</span> {imageBlobUrl}</p>
+                <button 
+                  className="mt-2 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs"
+                  onClick={() => {
+                    if (result.imageUrl) {
+                      loadImageWithHeaders(result.imageUrl);
+                    }
+                  }}
+                >
+                  Reload Image
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

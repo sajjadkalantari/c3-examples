@@ -7,6 +7,7 @@
     {
       "id": 8,
       "type": "VAEDecode",
+      "class_type": "VAEDecode",
       "pos": [
         1340,
         -20
@@ -36,8 +37,7 @@
           "type": "IMAGE",
           "slot_index": 0,
           "links": [
-            51,
-            207
+            51
           ]
         }
       ],
@@ -46,11 +46,15 @@
         "ver": "0.3.29",
         "Node name for S&R": "VAEDecode"
       },
-      "widgets_values": []
+      "widgets_values": [],
+      "_meta": {
+        "title": "VAE Decode"
+      }
     },
     {
       "id": 69,
       "type": "UNETLoader",
+      "class_type": "UNETLoader",
       "pos": [
         80,
         -90
@@ -82,11 +86,15 @@
         "default"
       ],
       "color": "#223",
-      "bgcolor": "#335"
+      "bgcolor": "#335",
+      "_meta": {
+        "title": "Load Diffusion Model"
+      }
     },
     {
       "id": 54,
       "type": "QuadrupleCLIPLoader",
+      "class_type": "QuadrupleCLIPLoader",
       "pos": [
         -302.8700866699219,
         122.9705581665039
@@ -122,11 +130,15 @@
         "llama_3.1_8b_instruct_fp8_scaled.safetensors"
       ],
       "color": "#223",
-      "bgcolor": "#335"
+      "bgcolor": "#335",
+      "_meta": {
+        "title": "QuadrupleCLIPLoader"
+      }
     },
     {
       "id": 40,
       "type": "CLIPTextEncode",
+      "class_type": "CLIPTextEncode",
       "pos": [
         408.39117431640625,
         294.7373352050781
@@ -167,11 +179,15 @@
         "blurry, no background, dark, low contrast, hidden details, realistic or gritty style, muted colors, horror elements, sci-fi or cyberpunk theme, robotic features, angry or sad expressions, incorrect nose color, cape, superhero clothing"
       ],
       "color": "#322",
-      "bgcolor": "#533"
+      "bgcolor": "#533",
+      "_meta": {
+        "title": "Negative Prompt"
+      }
     },
     {
       "id": 16,
       "type": "CLIPTextEncode",
+      "class_type": "CLIPTextEncode",
       "pos": [
         403.5981140136719,
         49.95309066772461
@@ -210,41 +226,22 @@
         "A cheerful yellow Labrador Retriever with a black nose, sitting proudly on top of a grassy mound in a sunny park. Soft, whimsical, highly detailed art in Studio Ghibli style, with pastel colors, magical light effects, and a warm, inviting atmosphere."
       ],
       "color": "#232",
-      "bgcolor": "#353"
-    },
-    {
-      "id": 75,
-      "type": "Note",
-      "pos": [
-        -289.26214599609375,
-        393.8748474121094
-      ],
-      "size": [
-        415.6177062988281,
-        395.4561462402344
-      ],
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [],
-      "properties": {},
-      "widgets_values": [
-        "## Official sampling settings\n\nProvided for reference, my workflows may have slightly different settings.\n\n### HiDream Full\n\n* hidream_i1_full_fp16.safetensors\n* shift: 3.0\n* steps: 50\n* sampler: uni_pc\n* scheduler: simple\n* cfg: 5.0\n\n### HiDream Dev\n\n* hidream_i1_dev_bf16.safetensors\n* shift: 6.0\n* steps: 28\n* sampler: lcm\n* scheduler: normal\n* cfg: 1.0 (no negative prompt)\n\n### HiDream Fast\n\n* hidream_i1_fast_bf16.safetensors\n* shift: 3.0\n* steps: 16\n* sampler: lcm\n* scheduler: normal\n* cfg: 1.0 (no negative prompt)\n"
-      ],
-      "color": "#432",
-      "bgcolor": "#653"
+      "bgcolor": "#353",
+      "_meta": {
+        "title": "Positive Prompt"
+      }
     },
     {
       "id": 9,
       "type": "SaveImage",
+      "class_type": "SaveImage",
       "pos": [
         1341.1788330078125,
         98.9148178100586
       ],
       "size": [
-        210,
-        46
+        966.615966796875,
+        1025.3206787109375
       ],
       "flags": {},
       "order": 11,
@@ -259,38 +256,20 @@
       "outputs": [],
       "properties": {
         "cnr_id": "comfy-core",
-        "ver": "0.3.29"
+        "ver": "0.3.29",
+        "Node name for S&R": "SaveImage"
       },
       "widgets_values": [
         "ComfyUI"
-      ]
-    },
-    {
-      "id": 73,
-      "type": "Note",
-      "pos": [
-        -252.49691772460938,
-        -61.038917541503906
       ],
-      "size": [
-        250,
-        88
-      ],
-      "flags": {},
-      "order": 3,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [],
-      "properties": {},
-      "widgets_values": [
-        "You can try changing the weight_dtype to fp8 if you are running out of memory."
-      ],
-      "color": "#432",
-      "bgcolor": "#653"
+      "_meta": {
+        "title": "Save Image"
+      }
     },
     {
       "id": 70,
       "type": "ModelSamplingSD3",
+      "class_type": "ModelSamplingSD3",
       "pos": [
         602.45751953125,
         -87.94581604003906
@@ -326,11 +305,15 @@
       },
       "widgets_values": [
         3.0000000000000004
-      ]
+      ],
+      "_meta": {
+        "title": "ModelSamplingSD3"
+      }
     },
     {
       "id": 82,
       "type": "KSampler",
+      "class_type": "KSampler",
       "pos": [
         962.5425415039062,
         -22.302921295166016
@@ -387,11 +370,15 @@
         "uni_pc",
         "simple",
         1
-      ]
+      ],
+      "_meta": {
+        "title": "KSampler"
+      }
     },
     {
       "id": 55,
       "type": "VAELoader",
+      "class_type": "VAELoader",
       "pos": [
         974.8419189453125,
         316.1077575683594
@@ -421,11 +408,15 @@
       },
       "widgets_values": [
         "ae.safetensors"
-      ]
+      ],
+      "_meta": {
+        "title": "Load VAE"
+      }
     },
     {
       "id": 87,
       "type": "EmptySD3LatentImage",
+      "class_type": "EmptySD3LatentImage",
       "pos": [
         518.316162109375,
         537.637451171875
@@ -458,398 +449,9 @@
         1
       ],
       "color": "#323",
-      "bgcolor": "#535"
-    },
-    {
-      "id": 13,
-      "type": "VHS_VideoCombine",
-      "pos": [
-        1600,
-        200
-      ],
-      "size": [
-        210,
-        46
-      ],
-      "flags": {},
-      "order": 14,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "frame_rate",
-          "type": "INT",
-          "link": 210,
-          "widget": {
-            "name": "frame_rate",
-            "value": 24
-          }
-        },
-        {
-          "name": "loop_count",
-          "type": "INT",
-          "link": null,
-          "widget": {
-            "name": "loop_count",
-            "value": 0
-          }
-        },
-        {
-          "name": "filename_prefix",
-          "type": "STRING",
-          "link": null,
-          "widget": {
-            "name": "filename_prefix",
-            "value": "Video"
-          }
-        },
-        {
-          "name": "format",
-          "type": "COMBO",
-          "link": null,
-          "widget": {
-            "name": "format",
-            "value": "video/h264-mp4"
-          }
-        },
-        {
-          "name": "pix_fmt",
-          "type": "COMBO",
-          "link": null,
-          "widget": {
-            "name": "pix_fmt",
-            "value": "yuv420p"
-          }
-        },
-        {
-          "name": "crf",
-          "type": "INT",
-          "link": null,
-          "widget": {
-            "name": "crf",
-            "value": 19
-          }
-        },
-        {
-          "name": "save_metadata",
-          "type": "BOOLEAN",
-          "link": null,
-          "widget": {
-            "name": "save_metadata",
-            "value": true
-          }
-        },
-        {
-          "name": "trim_to_audio",
-          "type": "BOOLEAN",
-          "link": null,
-          "widget": {
-            "name": "trim_to_audio",
-            "value": false
-          }
-        },
-        {
-          "name": "pingpong",
-          "type": "BOOLEAN",
-          "link": null,
-          "widget": {
-            "name": "pingpong",
-            "value": false
-          }
-        },
-        {
-          "name": "save_output",
-          "type": "BOOLEAN",
-          "link": null,
-          "widget": {
-            "name": "save_output",
-            "value": true
-          }
-        },
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 208
-        },
-        {
-          "name": "audio",
-          "type": "AUDIO",
-          "link": 209
-        }
-      ],
-      "outputs": [
-        {
-          "name": "VIDEO",
-          "type": "VIDEO",
-          "slot_index": 0,
-          "links": []
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.3.29",
-        "Node name for S&R": "VHS_VideoCombine"
-      },
-      "widgets_values": [],
+      "bgcolor": "#535",
       "_meta": {
-        "title": "Video Combine 🎥🅥🅗🅢"
-      }
-    },
-    {
-      "id": 26,
-      "type": "LoadAudio",
-      "pos": [
-        1200,
-        400
-      ],
-      "size": [
-        210,
-        46
-      ],
-      "flags": {},
-      "order": 12,
-      "mode": 0,
-      "inputs": {
-        "audio": "welcome.flac"
-      },
-      "outputs": [
-        {
-          "name": "AUDIO",
-          "type": "AUDIO",
-          "slot_index": 0,
-          "links": [
-            200,
-            209
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.3.29",
-        "Node name for S&R": "LoadAudio"
-      },
-      "widgets_values": [],
-      "_meta": {
-        "title": "LoadAudio"
-      }
-    },
-    {
-      "id": 31,
-      "type": "SONICSampler",
-      "pos": [
-        1400,
-        300
-      ],
-      "size": [
-        210,
-        46
-      ],
-      "flags": {},
-      "order": 13,
-      "mode": 0,
-      "inputs": {
-        "seed": 2054408119,
-        "inference_steps": 25,
-        "dynamic_scale": 1,
-        "fps": 24,
-        "model": [
-          "34",
-          0
-        ],
-        "data_dict": [
-          "33",
-          0
-        ]
-      },
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "slot_index": 0,
-          "links": [
-            208
-          ]
-        },
-        {
-          "name": "FPS",
-          "type": "INT",
-          "slot_index": 1,
-          "links": [
-            210
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.3.29",
-        "Node name for S&R": "SONICSampler"
-      },
-      "widgets_values": [],
-      "_meta": {
-        "title": "SONICSampler"
-      }
-    },
-    {
-      "id": 32,
-      "type": "ImageOnlyCheckpointLoader",
-      "pos": [
-        800,
-        300
-      ],
-      "size": [
-        210,
-        46
-      ],
-      "flags": {},
-      "order": 11,
-      "mode": 0,
-      "inputs": {
-        "ckpt_name": "svd_xt.safetensors"
-      },
-      "outputs": [
-        {
-          "name": "MODEL",
-          "type": "MODEL",
-          "slot_index": 0,
-          "links": [
-            201
-          ]
-        },
-        {
-          "name": "CLIP_VISION",
-          "type": "CLIP_VISION",
-          "slot_index": 1,
-          "links": [
-            202
-          ]
-        },
-        {
-          "name": "VAE",
-          "type": "VAE",
-          "slot_index": 2,
-          "links": [
-            203
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.3.29",
-        "Node name for S&R": "ImageOnlyCheckpointLoader"
-      },
-      "widgets_values": [],
-      "_meta": {
-        "title": "Image Only Checkpoint Loader (img2vid model)"
-      }
-    },
-    {
-      "id": 33,
-      "type": "SONIC_PreData",
-      "pos": [
-        1100,
-        300
-      ],
-      "size": [
-        210,
-        46
-      ],
-      "flags": {},
-      "order": 12,
-      "mode": 0,
-      "inputs": {
-        "min_resolution": 576,
-        "duration": 150,
-        "expand_ratio": 1,
-        "clip_vision": [
-          "32",
-          1
-        ],
-        "vae": [
-          "32",
-          2
-        ],
-        "audio": [
-          "26",
-          0
-        ],
-        "image": [
-          "8",
-          0
-        ],
-        "weight_dtype": [
-          "34",
-          1
-        ]
-      },
-      "outputs": [
-        {
-          "name": "DATA",
-          "type": "DATA",
-          "slot_index": 0,
-          "links": [
-            204
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.3.29",
-        "Node name for S&R": "SONIC_PreData"
-      },
-      "widgets_values": [],
-      "_meta": {
-        "title": "SONIC_PreData"
-      }
-    },
-    {
-      "id": 34,
-      "type": "SONICTLoader",
-      "pos": [
-        950,
-        400
-      ],
-      "size": [
-        210,
-        46
-      ],
-      "flags": {},
-      "order": 12,
-      "mode": 0,
-      "inputs": {
-        "sonic_unet": "unet.pth",
-        "ip_audio_scale": 1,
-        "use_interframe": true,
-        "dtype": "bf16",
-        "model": [
-          "32",
-          0
-        ]
-      },
-      "outputs": [
-        {
-          "name": "MODEL",
-          "type": "MODEL",
-          "slot_index": 0,
-          "links": [
-            205
-          ]
-        },
-        {
-          "name": "WEIGHT_DTYPE",
-          "type": "WEIGHT_DTYPE",
-          "slot_index": 1,
-          "links": [
-            206
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.3.29",
-        "Node name for S&R": "SONICTLoader"
-      },
-      "widgets_values": [],
-      "_meta": {
-        "title": "SONICTLoader"
+        "title": "EmptySD3LatentImage"
       }
     }
   ],
@@ -933,94 +535,6 @@
       82,
       3,
       "LATENT"
-    ],
-    [
-      200,
-      26,
-      0,
-      33,
-      5,
-      "AUDIO"
-    ],
-    [
-      201,
-      32,
-      0,
-      34,
-      4,
-      "MODEL"
-    ],
-    [
-      202,
-      32,
-      1,
-      33,
-      2,
-      "CLIP_VISION"
-    ],
-    [
-      203,
-      32,
-      2,
-      33,
-      3,
-      "VAE"
-    ],
-    [
-      204,
-      33,
-      0,
-      31,
-      5,
-      "DATA_DICT"
-    ],
-    [
-      205,
-      34,
-      0,
-      31,
-      4,
-      "MODEL"
-    ],
-    [
-      206,
-      34,
-      1,
-      33,
-      6,
-      "WEIGHT_DTYPE"
-    ],
-    [
-      207,
-      8,
-      0,
-      33,
-      4,
-      "IMAGE"
-    ],
-    [
-      208,
-      31,
-      0,
-      13,
-      10,
-      "IMAGES"
-    ],
-    [
-      209,
-      26,
-      0,
-      13,
-      11,
-      "AUDIO"
-    ],
-    [
-      210,
-      31,
-      1,
-      13,
-      0,
-      "frame_rate"
     ]
   ],
   "groups": [],
@@ -1039,5 +553,119 @@
     "VHS_MetadataImage": true,
     "VHS_KeepIntermediate": true
   },
-  "version": 0.4
-} 
+  "version": 0.4,
+  "extra_pnginfo": {
+    "prompt": {
+      "8": {
+        "inputs": {
+          "samples": ["82", 0],
+          "vae": ["55", 0]
+        },
+        "class_type": "VAEDecode",
+        "_meta": {
+          "title": "VAE Decode"
+        }
+      },
+      "9": {
+        "inputs": {
+          "filename_prefix": "ComfyUI",
+          "images": ["8", 0]
+        },
+        "class_type": "SaveImage",
+        "_meta": {
+          "title": "Save Image"
+        }
+      },
+      "16": {
+        "inputs": {
+          "text": "A cheerful yellow Labrador Retriever with a black nose, sitting proudly on top of a grassy mound in a sunny park. Soft, whimsical, highly detailed art in Studio Ghibli style, with pastel colors, magical light effects, and a warm, inviting atmosphere.",
+          "clip": ["54", 0]
+        },
+        "class_type": "CLIPTextEncode",
+        "_meta": {
+          "title": "Positive Prompt"
+        }
+      },
+      "40": {
+        "inputs": {
+          "text": "blurry, no background, dark, low contrast, hidden details, realistic or gritty style, muted colors, horror elements, sci-fi or cyberpunk theme, robotic features, angry or sad expressions, incorrect nose color, cape, superhero clothing",
+          "clip": ["54", 0]
+        },
+        "class_type": "CLIPTextEncode",
+        "_meta": {
+          "title": "Negative Prompt"
+        }
+      },
+      "54": {
+        "inputs": {
+          "clip_name1": "clip_l_hidream.safetensors",
+          "clip_name2": "clip_g_hidream.safetensors",
+          "clip_name3": "t5xxl_fp8_e4m3fn_scaled.safetensors",
+          "clip_name4": "llama_3.1_8b_instruct_fp8_scaled.safetensors"
+        },
+        "class_type": "QuadrupleCLIPLoader",
+        "_meta": {
+          "title": "QuadrupleCLIPLoader"
+        }
+      },
+      "55": {
+        "inputs": {
+          "vae_name": "ae.safetensors"
+        },
+        "class_type": "VAELoader",
+        "_meta": {
+          "title": "Load VAE"
+        }
+      },
+      "69": {
+        "inputs": {
+          "unet_name": "HiDream/hidream_i1_dev_fp8.safetensors",
+          "weight_dtype": "default"
+        },
+        "class_type": "UNETLoader",
+        "_meta": {
+          "title": "Load Diffusion Model"
+        }
+      },
+      "70": {
+        "inputs": {
+          "shift": 3.0000000000000004,
+          "model": ["69", 0]
+        },
+        "class_type": "ModelSamplingSD3",
+        "_meta": {
+          "title": "ModelSamplingSD3"
+        }
+      },
+      "82": {
+        "inputs": {
+          "seed": 1117217976302631,
+          "steps": 35,
+          "cfg": 5,
+          "sampler_name": "uni_pc",
+          "scheduler": "simple",
+          "denoise": 1,
+          "model": ["70", 0],
+          "positive": ["16", 0],
+          "negative": ["40", 0],
+          "latent_image": ["87", 0]
+        },
+        "class_type": "KSampler",
+        "_meta": {
+          "title": "KSampler"
+        }
+      },
+      "87": {
+        "inputs": {
+          "width": 1024,
+          "height": 1024,
+          "batch_size": 1
+        },
+        "class_type": "EmptySD3LatentImage",
+        "_meta": {
+          "title": "EmptySD3LatentImage"
+        }
+      }
+    }
+  }
+}

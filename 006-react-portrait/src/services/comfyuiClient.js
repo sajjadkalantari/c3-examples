@@ -12,12 +12,17 @@ class ComfyUIClient {
    * @param {string} apiKey - Comput3 API key
    */
   constructor(serverUrl, apiKey) {
-    // Add the proxy URL for development to avoid CORS issues
+    // Store the original server URL without any modifications
+    // Make sure we don't have a trailing slash
     this.originalServerUrl = serverUrl.endsWith('/') ? serverUrl.slice(0, -1) : serverUrl;
+    
+    // For API calls that need CORS proxy, add it to the URL
     this.serverUrl = PROXY_URL + this.originalServerUrl;
+    
     this.apiKey = apiKey;
     this.clientId = this._getClientId();
     console.log(`🔌 Initialized ComfyUIClient with server URL: ${this.serverUrl}`);
+    console.log(`🖼️ Using direct image/video URL base: ${this.originalServerUrl}`);
   }
   
   /**
@@ -36,7 +41,7 @@ class ComfyUIClient {
   _getHeaders() {
     return {
       'X-C3-API-KEY': this.apiKey,
-      'X-Requested-With': 'XMLHttpRequest'  // Required by CORS-Anywhere
+      'X-Requested-With': 'XMLHttpRequest'  // Required by CORS-Anywhere and CORS Proxy
     };
   }
   
@@ -281,16 +286,177 @@ class ComfyUIClient {
     try {
       console.log('🚀 Queueing workflow');
       
-      // Structure the payload - needs to match the format ComfyUI expects
-      const payload = {
+      // Check if workflow is in the correct format with nodes and 'class_type'
+      let apiPrompt = {};
+      
+      if (workflow.nodes) {
+        // Need to transform from visual workflow format to API format
+        console.log('Converting workflow format from visual to API structure');
+        
+        // Create the API format with prompt object (node id -> node config)
+        
+        workflow.nodes.forEach(node => {
+          // Skip Note nodes as they're not supported by the API
+          if (node.type === 'Note') {
+            console.log(`Skipping Note node with ID ${node.id} as it's not supported by the API`);
+            return;
+          }
+          
+          // Create the correct node format for the API
+          const nodeConfig = {
+            class_type: node.class_type || node.type, // Use class_type property or fallback to type
+            inputs: {},
+            _meta: {
+              title: node.title || node.type
+            }
+          };
+          
+          // Add widget values as inputs if needed
+          if (node.widgets_values) {
+            // Map widget values to inputs based on node type
+            if (node.type === 'CLIPTextEncode') {
+              nodeConfig.inputs.text = node.widgets_values[0];
+              // Find connected clip node
+              const clipLink = (node.inputs || []).find(input => input.name === 'clip')?.link;
+              if (clipLink) {
+                const linkInfo = workflow.links.find(link => link[0] === clipLink);
+                if (linkInfo) {
+                  const sourceNodeId = linkInfo[1];
+                  nodeConfig.inputs.clip = [String(sourceNodeId), 0];
+                }
+              }
+            } else if (node.type === 'VAELoader') {
+              nodeConfig.inputs.vae_name = node.widgets_values[0];
+            } else if (node.type === 'UNETLoader') {
+              nodeConfig.inputs.unet_name = node.widgets_values[0];
+              nodeConfig.inputs.weight_dtype = node.widgets_values[1] || "default";
+            } else if (node.type === 'QuadrupleCLIPLoader') {
+              nodeConfig.inputs.clip_name1 = node.widgets_values[0];
+              nodeConfig.inputs.clip_name2 = node.widgets_values[1];
+              nodeConfig.inputs.clip_name3 = node.widgets_values[2];
+              nodeConfig.inputs.clip_name4 = node.widgets_values[3];
+            } else if (node.type === 'ModelSamplingSD3') {
+              nodeConfig.inputs.shift = node.widgets_values[0];
+              
+              // Add model input if connected
+              const modelLink = (node.inputs || []).find(input => input.name === 'model')?.link;
+              if (modelLink) {
+                const linkInfo = workflow.links.find(link => link[0] === modelLink);
+                if (linkInfo) {
+                  const sourceNodeId = linkInfo[1];
+                  nodeConfig.inputs.model = [String(sourceNodeId), 0];
+                }
+              }
+            } else if (node.type === 'KSampler') {
+              nodeConfig.inputs.seed = node.widgets_values[0];
+              nodeConfig.inputs.steps = node.widgets_values[2];
+              nodeConfig.inputs.cfg = node.widgets_values[3];
+              nodeConfig.inputs.sampler_name = node.widgets_values[4];
+              nodeConfig.inputs.scheduler = node.widgets_values[5];
+              nodeConfig.inputs.denoise = node.widgets_values[6];
+              
+              // Add all connected inputs (model, positive, negative, latent_image)
+              const inputLinks = node.inputs || [];
+              for (const input of inputLinks) {
+                if (input.link) {
+                  const linkInfo = workflow.links.find(link => link[0] === input.link);
+                  if (linkInfo) {
+                    const sourceNodeId = linkInfo[1];
+                    nodeConfig.inputs[input.name] = [String(sourceNodeId), 0];
+                  }
+                }
+              }
+            } else if (node.type === 'EmptySD3LatentImage') {
+              nodeConfig.inputs.width = node.widgets_values[0];
+              nodeConfig.inputs.height = node.widgets_values[1];
+              nodeConfig.inputs.batch_size = node.widgets_values[2];
+            } else if (node.type === 'SaveImage') {
+              nodeConfig.inputs.filename_prefix = node.widgets_values[0];
+              
+              // Add images input if connected
+              const imagesLink = (node.inputs || []).find(input => input.name === 'images')?.link;
+              if (imagesLink) {
+                const linkInfo = workflow.links.find(link => link[0] === imagesLink);
+                if (linkInfo) {
+                  const sourceNodeId = linkInfo[1];
+                  nodeConfig.inputs.images = [String(sourceNodeId), 0];
+                }
+              }
+            } else if (node.type === 'VAEDecode') {
+              // Add all connected inputs (samples, vae)
+              const inputLinks = node.inputs || [];
+              for (const input of inputLinks) {
+                if (input.link) {
+                  const linkInfo = workflow.links.find(link => link[0] === input.link);
+                  if (linkInfo) {
+                    const sourceNodeId = linkInfo[1];
+                    nodeConfig.inputs[input.name] = [String(sourceNodeId), 0];
+                  }
+                }
+              }
+            }
+          } else {
+            // For nodes without widgets_values, collect inputs from links
+            if (node.inputs) {
+              for (const input of node.inputs) {
+                if (input.link) {
+                  const linkInfo = workflow.links.find(link => link[0] === input.link);
+                  if (linkInfo) {
+                    const sourceNodeId = linkInfo[1];
+                    nodeConfig.inputs[input.name] = [String(sourceNodeId), 0];
+                  }
+                }
+              }
+            }
+          }
+          
+          apiPrompt[node.id] = nodeConfig;
+        });
+        
+        console.log('Created API-formatted payload');
+      } else {
+        // Assume it's already in the correct API format
+        console.log('Using provided prompt format directly');
+        apiPrompt = workflow;
+      }
+      
+      // Create a cleaned-up version of the workflow without Note nodes
+      let cleanedWorkflow = null;
+      if (workflow.nodes) {
+        cleanedWorkflow = {
+          ...workflow,
+          nodes: workflow.nodes.filter(node => node.type !== 'Note'),
+          // Update links to exclude any that reference Note nodes
+          links: workflow.links.filter(link => {
+            const sourceNodeId = link[1];
+            const targetNodeId = link[3];
+            const sourceNode = workflow.nodes.find(n => n.id === sourceNodeId);
+            const targetNode = workflow.nodes.find(n => n.id === targetNodeId);
+            return !(sourceNode?.type === 'Note' || targetNode?.type === 'Note');
+          })
+        };
+      }
+      
+      // Create the final payload
+      const payload = workflow.nodes ? 
+      {
+        prompt: apiPrompt,
+        client_id: this.clientId,
+        extra_data: {
+          extra_pnginfo: {
+            workflow: cleanedWorkflow || workflow
+          }
+        }
+      } : 
+      {
         prompt: workflow,
         client_id: this.clientId
       };
       
-      console.log('Sending payload:', JSON.stringify(payload, null, 2));
+      console.log('Sending payload to API endpoint');
       
       const response = await axios.post(
-        `${this.serverUrl}/prompt`,
+        `${this.serverUrl}/api/prompt`,  // Changed from /prompt to /api/prompt based on working example
         payload,
         { headers: this._getHeaders() }
       );
@@ -517,20 +683,34 @@ class ComfyUIClient {
         return null;
       }
       
+      console.log('Raw prompt outputs:', promptData.outputs);
+      
       const outputs = promptData.outputs;
       const outputFiles = [];
       
       // Process all output nodes
       for (const nodeId in outputs) {
         const node = outputs[nodeId];
+        console.log(`Processing node ${nodeId}:`, node);
         
         // Process images in this node
         if (node.images) {
           for (const image of node.images) {
+            console.log(`Found image in node ${nodeId}:`, image);
+            
+            // Ensure the filename is properly formatted
+            const filename = image.filename || image.image || image.name || '';
+            if (!filename) {
+              console.warn(`No valid filename found for image in node ${nodeId}`);
+              continue;
+            }
+            
             // Create the correct URL
-            let imageUrl = `${this.originalServerUrl}/view?filename=${encodeURIComponent(image.filename)}`;
+            let imageUrl = `${this.originalServerUrl}/view?filename=${encodeURIComponent(filename)}`;
             if (image.type) {
               imageUrl += `&type=${encodeURIComponent(image.type)}`;
+            } else {
+              imageUrl += `&type=output`;
             }
             if (image.subfolder) {
               imageUrl += `&subfolder=${encodeURIComponent(image.subfolder)}`;
@@ -539,12 +719,12 @@ class ComfyUIClient {
             outputFiles.push({
               type: 'image',
               node_id: nodeId,
-              filename: image.filename,
+              filename: filename,
               subfolder: image.subfolder || '',
               url: imageUrl
             });
             
-            console.log(`Found image: ${image.filename}`);
+            console.log(`Added image: ${filename}, URL: ${imageUrl}`);
           }
         }
         
@@ -871,22 +1051,35 @@ class ComfyUIClient {
    * @returns {string} Image URL
    */
   getImageUrl(filename, subfolder = '') {
-    // Get the URL for an image file
-    const { serverUrl, originalServerUrl } = this;
+    if (!filename) {
+      console.error('❌ Cannot generate image URL: filename is empty');
+      return '';
+    }
+
+    // Format: serverUrl/view?filename=filename&subfolder=subfolder&type=output
+    // Always use the original server URL (without proxy) for direct browser loading
+    let url = '';
     
-    // For local development, we need to use the original URL (without the proxy)
-    // because the browser will load the image directly
-    let url = originalServerUrl;
-    
-    // Format: serverUrl/view?filename=filename&subfolder=subfolder/type
-    url += `/view?filename=${encodeURIComponent(filename)}`;
-    
-    if (subfolder) {
-      url += `&subfolder=${encodeURIComponent(subfolder)}`;
+    // Support both API formats: "filename.png" or with detailed name as "xyz_00001_.png"
+    // Make sure we're handling the URL correctly
+    if (filename.includes('/')) {
+      // If the filename already includes a path, use it directly
+      url = `${this.originalServerUrl}/view?filename=${encodeURIComponent(filename)}&type=output`;
+    } else {
+      // Regular filename
+      url = `${this.originalServerUrl}/view?filename=${encodeURIComponent(filename)}`;
+      
+      if (subfolder) {
+        url += `&subfolder=${encodeURIComponent(subfolder)}`;
+      }
+      
+      url += `&type=output`;
     }
     
-    url += `&type=output`;
+    // Note: The API key will be sent as a cookie when this URL is fetched
+    // We don't need to add it to the URL directly
     
+    console.log(`🖼️ Generated direct image URL: ${url}`);
     return url;
   }
   
