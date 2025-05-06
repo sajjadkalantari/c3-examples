@@ -411,8 +411,8 @@ const ImageToVideoGenerator = ({ apiKey }) => {
       // Get the first video (typically from SaveVideo node)
       const targetVideo = videos[0];
       
-      // Get video URL
-      const videoUrl = comfyClient.getVideoUrl(targetVideo.filename, targetVideo.subfolder);
+      // Download the video for displaying
+      const videoUrl = await comfyClient.downloadFile(targetVideo.url);
       
       // Add to results
       const newResult = {
@@ -673,12 +673,10 @@ const ImageToVideoGenerator = ({ apiKey }) => {
                           controls 
                           className="absolute w-full h-full object-contain"
                           poster={result.thumbnailUrl}
+                          src={result.videoUrl}
                           autoPlay={false}
                           loop
-                        >
-                          <source src={result.videoUrl} type="video/webm" />
-                          Your browser does not support the video tag.
-                        </video>
+                        />
                       </div>
                       
                       <div className="p-4 border-t bg-white">
