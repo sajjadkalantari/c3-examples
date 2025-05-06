@@ -70,13 +70,13 @@ const TextToVideoGenerator = ({ apiKey }) => {
       setWorkflowData(workflow);
       
       // Validate the workflow structure
-      const validation = comfyClient.validateWorkflow(workflow);
-      if (!validation.valid) {
-        const errorMessage = `Invalid workflow structure: ${validation.errors.join(', ')}`;
-        console.error(errorMessage);
-        setError(errorMessage);
-        return;
-      }
+      // const validation = comfyClient.validateWorkflow(workflow);
+      // if (!validation.valid) {
+      //   const errorMessage = `Invalid workflow structure: ${validation.errors.join(', ')}`;
+      //   console.error(errorMessage);
+      //   setError(errorMessage);
+      //   return;
+      // }
       
       // Update workflow with parameters
       setStatusMessage('Updating workflow parameters...');
@@ -96,6 +96,7 @@ const TextToVideoGenerator = ({ apiKey }) => {
       
       // Queue workflow
       setStatusMessage('Queueing workflow...');
+      console.log('Queueing workflow:', JSON.stringify(updatedWorkflow));
       const promptId = await comfyClient.queueWorkflow(updatedWorkflow);
       
       if (!promptId) {
@@ -104,7 +105,7 @@ const TextToVideoGenerator = ({ apiKey }) => {
       
       // Wait for workflow completion
       setStatusMessage('Processing video...');
-      const isComplete = await comfyClient.waitForWorkflowCompletion(promptId, 30, (status) => {
+      const isComplete = await comfyClient.waitForWorkflowCompletion(promptId, 15, (status) => {
         setStatusMessage(`Processing: ${status}`);
       });
       

@@ -286,15 +286,16 @@ class ComfyUIClient {
     try {
       console.log('🚀 Queueing workflow');
       
-      // Check if workflow is in the correct format with nodes and 'class_type'
+      // Check if workflow is in the correct format
       let apiPrompt = {};
       
+      // Detect if we're dealing with a ComfyUI workflow (with nodes and links)
+      // or an already API-formatted prompt
       if (workflow.nodes) {
         // Need to transform from visual workflow format to API format
         console.log('Converting workflow format from visual to API structure');
         
         // Create the API format with prompt object (node id -> node config)
-        
         workflow.nodes.forEach(node => {
           // Skip Note nodes as they're not supported by the API
           if (node.type === 'Note') {
@@ -311,152 +312,47 @@ class ComfyUIClient {
             }
           };
           
-          // Add widget values as inputs if needed
-          if (node.widgets_values) {
-            // Map widget values to inputs based on node type
-            if (node.type === 'CLIPTextEncode') {
-              nodeConfig.inputs.text = node.widgets_values[0];
-              // Find connected clip node
-              const clipLink = (node.inputs || []).find(input => input.name === 'clip')?.link;
-              if (clipLink) {
-                const linkInfo = workflow.links.find(link => link[0] === clipLink);
-                if (linkInfo) {
-                  const sourceNodeId = linkInfo[1];
-                  nodeConfig.inputs.clip = [String(sourceNodeId), 0];
-                }
-              }
-            } else if (node.type === 'VAELoader') {
-              nodeConfig.inputs.vae_name = node.widgets_values[0];
-            } else if (node.type === 'UNETLoader') {
-              nodeConfig.inputs.unet_name = node.widgets_values[0];
-              nodeConfig.inputs.weight_dtype = node.widgets_values[1] || "default";
-            } else if (node.type === 'QuadrupleCLIPLoader') {
-              nodeConfig.inputs.clip_name1 = node.widgets_values[0];
-              nodeConfig.inputs.clip_name2 = node.widgets_values[1];
-              nodeConfig.inputs.clip_name3 = node.widgets_values[2];
-              nodeConfig.inputs.clip_name4 = node.widgets_values[3];
-            } else if (node.type === 'ModelSamplingSD3') {
-              nodeConfig.inputs.shift = node.widgets_values[0];
-              
-              // Add model input if connected
-              const modelLink = (node.inputs || []).find(input => input.name === 'model')?.link;
-              if (modelLink) {
-                const linkInfo = workflow.links.find(link => link[0] === modelLink);
-                if (linkInfo) {
-                  const sourceNodeId = linkInfo[1];
-                  nodeConfig.inputs.model = [String(sourceNodeId), 0];
-                }
-              }
-            } else if (node.type === 'KSampler') {
-              nodeConfig.inputs.seed = node.widgets_values[0];
-              nodeConfig.inputs.steps = node.widgets_values[2];
-              nodeConfig.inputs.cfg = node.widgets_values[3];
-              nodeConfig.inputs.sampler_name = node.widgets_values[4];
-              nodeConfig.inputs.scheduler = node.widgets_values[5];
-              nodeConfig.inputs.denoise = node.widgets_values[6];
-              
-              // Add all connected inputs (model, positive, negative, latent_image)
-              const inputLinks = node.inputs || [];
-              for (const input of inputLinks) {
-                if (input.link) {
-                  const linkInfo = workflow.links.find(link => link[0] === input.link);
-                  if (linkInfo) {
-                    const sourceNodeId = linkInfo[1];
-                    nodeConfig.inputs[input.name] = [String(sourceNodeId), 0];
-                  }
-                }
-              }
-            } else if (node.type === 'EmptySD3LatentImage') {
-              nodeConfig.inputs.width = node.widgets_values[0];
-              nodeConfig.inputs.height = node.widgets_values[1];
-              nodeConfig.inputs.batch_size = node.widgets_values[2];
-            } else if (node.type === 'SaveImage') {
-              nodeConfig.inputs.filename_prefix = node.widgets_values[0];
-              
-              // Add images input if connected
-              const imagesLink = (node.inputs || []).find(input => input.name === 'images')?.link;
-              if (imagesLink) {
-                const linkInfo = workflow.links.find(link => link[0] === imagesLink);
-                if (linkInfo) {
-                  const sourceNodeId = linkInfo[1];
-                  nodeConfig.inputs.images = [String(sourceNodeId), 0];
-                }
-              }
-            } else if (node.type === 'VAEDecode') {
-              // Add all connected inputs (samples, vae)
-              const inputLinks = node.inputs || [];
-              for (const input of inputLinks) {
-                if (input.link) {
-                  const linkInfo = workflow.links.find(link => link[0] === input.link);
-                  if (linkInfo) {
-                    const sourceNodeId = linkInfo[1];
-                    nodeConfig.inputs[input.name] = [String(sourceNodeId), 0];
-                  }
-                }
-              }
-            }
-          } else {
-            // For nodes without widgets_values, collect inputs from links
-            if (node.inputs) {
-              for (const input of node.inputs) {
-                if (input.link) {
-                  const linkInfo = workflow.links.find(link => link[0] === input.link);
-                  if (linkInfo) {
-                    const sourceNodeId = linkInfo[1];
-                    nodeConfig.inputs[input.name] = [String(sourceNodeId), 0];
-                  }
-                }
-              }
-            }
-          }
+          // Process inputs from both connections and widget values
+          this._processNodeInputs(node, nodeConfig, workflow);
           
           apiPrompt[node.id] = nodeConfig;
         });
         
         console.log('Created API-formatted payload');
-      } else {
-        // Assume it's already in the correct API format
+      } else if (workflow.prompt) {
+        // It's already in the API format with a "prompt" property
         console.log('Using provided prompt format directly');
+        apiPrompt = workflow.prompt;
+      } else {
+        // Assume it's a direct API prompt format
+        console.log('Using provided object as direct API prompt format');
         apiPrompt = workflow;
       }
       
       // Create a cleaned-up version of the workflow without Note nodes
       let cleanedWorkflow = null;
       if (workflow.nodes) {
-        cleanedWorkflow = {
-          ...workflow,
-          nodes: workflow.nodes.filter(node => node.type !== 'Note'),
-          // Update links to exclude any that reference Note nodes
-          links: workflow.links.filter(link => {
-            const sourceNodeId = link[1];
-            const targetNodeId = link[3];
-            const sourceNode = workflow.nodes.find(n => n.id === sourceNodeId);
-            const targetNode = workflow.nodes.find(n => n.id === targetNodeId);
-            return !(sourceNode?.type === 'Note' || targetNode?.type === 'Note');
-          })
-        };
+        cleanedWorkflow = this._cleanWorkflow(workflow);
+      }
+      
+      // Handle case where the workflow might already have extra_data
+      let extraData = workflow.extra_data || {};
+      if (cleanedWorkflow) {
+        extraData.extra_pnginfo = extraData.extra_pnginfo || {};
+        extraData.extra_pnginfo.workflow = cleanedWorkflow;
       }
       
       // Create the final payload
-      const payload = workflow.nodes ? 
-      {
+      const payload = {
         prompt: apiPrompt,
         client_id: this.clientId,
-        extra_data: {
-          extra_pnginfo: {
-            workflow: cleanedWorkflow || workflow
-          }
-        }
-      } : 
-      {
-        prompt: workflow,
-        client_id: this.clientId
+        extra_data: extraData
       };
       
       console.log('Sending payload to API endpoint');
       
       const response = await axios.post(
-        `${this.serverUrl}/api/prompt`,  // Changed from /prompt to /api/prompt based on working example
+        `${this.serverUrl}/api/prompt`,
         payload,
         { headers: this._getHeaders() }
       );
@@ -485,6 +381,195 @@ class ComfyUIClient {
       }
       return null;
     }
+  }
+  
+  // Helper method to process node inputs from both connections and widget values
+  _processNodeInputs(node, nodeConfig, workflow) {
+    // Add widget values as inputs
+    if (node.widgets_values) {
+      // Handle both array form and object form of widgets_values
+      if (Array.isArray(node.widgets_values)) {
+        // Apply node-specific widget mappings based on node type
+        switch (node.type) {
+          case 'CLIPTextEncode':
+            nodeConfig.inputs.text = node.widgets_values[0];
+            break;
+          case 'VAELoader':
+            nodeConfig.inputs.vae_name = node.widgets_values[0];
+            break;
+          case 'UNETLoader':
+            nodeConfig.inputs.unet_name = node.widgets_values[0];
+            nodeConfig.inputs.weight_dtype = node.widgets_values[1] || "default";
+            break;
+          case 'QuadrupleCLIPLoader':
+            nodeConfig.inputs.clip_name1 = node.widgets_values[0];
+            nodeConfig.inputs.clip_name2 = node.widgets_values[1];
+            nodeConfig.inputs.clip_name3 = node.widgets_values[2];
+            nodeConfig.inputs.clip_name4 = node.widgets_values[3];
+            break;
+          case 'ModelSamplingSD3':
+            nodeConfig.inputs.shift = node.widgets_values[0];
+            break;
+          case 'KSampler':
+            nodeConfig.inputs.seed = node.widgets_values[0];
+            nodeConfig.inputs.steps = node.widgets_values[2];
+            nodeConfig.inputs.cfg = node.widgets_values[3];
+            nodeConfig.inputs.sampler_name = node.widgets_values[4];
+            nodeConfig.inputs.scheduler = node.widgets_values[5];
+            nodeConfig.inputs.denoise = node.widgets_values[6];
+            break;
+          case 'EmptySD3LatentImage':
+            nodeConfig.inputs.width = node.widgets_values[0];
+            nodeConfig.inputs.height = node.widgets_values[1];
+            nodeConfig.inputs.batch_size = node.widgets_values[2];
+            break;
+          case 'SaveImage':
+            nodeConfig.inputs.filename_prefix = node.widgets_values[0];
+            break;
+          case 'LoadWanVideoT5TextEncoder':
+            nodeConfig.inputs.model_name = node.widgets_values[0];
+            nodeConfig.inputs.precision = node.widgets_values[1];
+            nodeConfig.inputs.load_device = node.widgets_values[2];
+            nodeConfig.inputs.quantization = node.widgets_values[3];
+            break;
+          case 'WanVideoVAELoader':
+            nodeConfig.inputs.model_name = node.widgets_values[0];
+            nodeConfig.inputs.precision = node.widgets_values[1];
+            break;
+          case 'WanVideoTextEncode':
+            nodeConfig.inputs.positive_prompt = node.widgets_values[0];
+            nodeConfig.inputs.negative_prompt = node.widgets_values[1];
+            nodeConfig.inputs.force_offload = node.widgets_values[2] === true || node.widgets_values[2] === "true";
+            break;
+          case 'WanVideoSampler':
+            nodeConfig.inputs.steps = parseInt(node.widgets_values[0], 10);
+            nodeConfig.inputs.cfg = parseFloat(node.widgets_values[1]);
+            nodeConfig.inputs.shift = parseInt(node.widgets_values[2], 10);
+            nodeConfig.inputs.seed = node.widgets_values[3];
+            // Fix the scheduler and riflex_freq_index issue (they were swapped in the error)
+            nodeConfig.inputs.scheduler = typeof node.widgets_values[5] === 'string' ? node.widgets_values[5] : "unipc";
+            nodeConfig.inputs.riflex_freq_index = parseInt(node.widgets_values[6], 10) || 0;
+            nodeConfig.inputs.denoise_strength = 1.0;// parseFloat(node.widgets_values[7]);
+            nodeConfig.inputs.batched_cfg = node.widgets_values[8] === true || node.widgets_values[8] === "true";
+            nodeConfig.inputs.rope_function = typeof node.widgets_values[9] === 'string' ? node.widgets_values[9] : "comfy";
+            nodeConfig.inputs.force_offload = node.widgets_values[4] === true || node.widgets_values[4] === "true";
+            break;
+          case 'WanVideoEmptyEmbeds':
+            nodeConfig.inputs.width = parseInt(node.widgets_values[0], 10);
+            nodeConfig.inputs.height = parseInt(node.widgets_values[1], 10);
+            nodeConfig.inputs.num_frames = parseInt(node.widgets_values[2], 10);
+            break;
+          case 'WanVideoBlockSwap':
+            nodeConfig.inputs.blocks_to_swap = parseInt(node.widgets_values[0], 10);
+            nodeConfig.inputs.offload_img_emb = node.widgets_values[1] === true || node.widgets_values[1] === "true";
+            nodeConfig.inputs.offload_txt_emb = node.widgets_values[2] === true || node.widgets_values[2] === "true";
+            nodeConfig.inputs.use_non_blocking = node.widgets_values[3] === true || node.widgets_values[3] === "true";
+            nodeConfig.inputs.vace_blocks_to_swap = parseInt(node.widgets_values[4], 10) || 0;
+            break;
+          case 'WanVideoTorchCompileSettings':
+            nodeConfig.inputs.backend = node.widgets_values[0];
+            nodeConfig.inputs.fullgraph = node.widgets_values[1] === true || node.widgets_values[1] === "true";
+            nodeConfig.inputs.mode = node.widgets_values[2];
+            nodeConfig.inputs.dynamic = node.widgets_values[3] === true || node.widgets_values[3] === "true";
+            nodeConfig.inputs.dynamo_cache_size_limit = parseInt(node.widgets_values[4], 10);
+            nodeConfig.inputs.compile_transformer_blocks_only = node.widgets_values[5] === true || node.widgets_values[5] === "true";
+            nodeConfig.inputs.dynamo_recompile_limit = parseInt(node.widgets_values[6], 10) || 128;
+            break;
+          case 'WanVideoModelLoader':
+            nodeConfig.inputs.model = node.widgets_values[0];
+            nodeConfig.inputs.base_precision = node.widgets_values[1];
+            nodeConfig.inputs.quantization = node.widgets_values[2];
+            nodeConfig.inputs.load_device = node.widgets_values[3];
+            nodeConfig.inputs.attention_mode = node.widgets_values[4];
+            break;
+          case 'WanVideoDecode':
+            nodeConfig.inputs.enable_vae_tiling = node.widgets_values[0] === true || node.widgets_values[0] === "true";
+            nodeConfig.inputs.tile_x = parseInt(node.widgets_values[1], 10);
+            nodeConfig.inputs.tile_y = parseInt(node.widgets_values[2], 10);
+            nodeConfig.inputs.tile_stride_x = parseInt(node.widgets_values[3], 10);
+            nodeConfig.inputs.tile_stride_y = parseInt(node.widgets_values[4], 10);
+            break;
+          case 'WanVideoEnhanceAVideo':
+            nodeConfig.inputs.weight = parseFloat(node.widgets_values[0]);
+            nodeConfig.inputs.start_percent = parseFloat(node.widgets_values[1]);
+            nodeConfig.inputs.end_percent = parseFloat(node.widgets_values[2]);
+            break;
+          case 'WanVideoTeaCache':
+            nodeConfig.inputs.rel_l1_thresh = parseFloat(node.widgets_values[0]);
+            nodeConfig.inputs.start_step = parseInt(node.widgets_values[1], 10);
+            nodeConfig.inputs.end_step = parseInt(node.widgets_values[2], 10);
+            nodeConfig.inputs.cache_device = node.widgets_values[3];
+            nodeConfig.inputs.use_coefficients = node.widgets_values[4];
+            nodeConfig.inputs.mode = node.widgets_values[5];
+            break;
+          // Add more case handlers for other node types as needed
+          default:
+            // For unknown node types, attempt to map widget values to inputs
+            // based on node inputs array if available
+            if (node.inputs && Array.isArray(node.inputs)) {
+              node.inputs.forEach((input, index) => {
+                if (index < node.widgets_values.length) {
+                  nodeConfig.inputs[input.name] = node.widgets_values[index];
+                }
+              });
+            }
+        }
+      } else if (typeof node.widgets_values === 'object') {
+        // Handle the case where widgets_values is an object (like in VHS_VideoCombine)
+        if (node.type === 'VHS_VideoCombine') {
+          // Map the specific required fields for VHS_VideoCombine
+          nodeConfig.inputs.frame_rate = node.widgets_values.frame_rate || 16;
+          nodeConfig.inputs.loop_count = node.widgets_values.loop_count || 0;
+          nodeConfig.inputs.filename_prefix = node.widgets_values.filename_prefix || "ComfyUI_output";
+          nodeConfig.inputs.format = node.widgets_values.format || "video/h264-mp4";
+          nodeConfig.inputs.pix_fmt = node.widgets_values.pix_fmt || "yuv420p";
+          nodeConfig.inputs.crf = node.widgets_values.crf || 19;
+          nodeConfig.inputs.save_metadata = node.widgets_values.save_metadata === true || node.widgets_values.save_metadata === "true";
+          nodeConfig.inputs.trim_to_audio = node.widgets_values.trim_to_audio === true || node.widgets_values.trim_to_audio === "true";
+          nodeConfig.inputs.pingpong = node.widgets_values.pingpong === true || node.widgets_values.pingpong === "true";
+          nodeConfig.inputs.save_output = node.widgets_values.save_output === true || node.widgets_values.save_output === "true";
+        } else {
+          // For other node types with object widgets_values, copy all non-UI specific properties
+          Object.keys(node.widgets_values).forEach(key => {
+            // Skip videopreview and similar UI-specific props
+            if (!['videopreview', 'hidden', 'paused'].includes(key)) {
+              nodeConfig.inputs[key] = node.widgets_values[key];
+            }
+          });
+        }
+      }
+    }
+    
+    // Process linked inputs
+    if (node.inputs && Array.isArray(node.inputs)) {
+      node.inputs.forEach(input => {
+        if (input.link !== null && input.link !== undefined) {
+          const linkInfo = workflow.links.find(link => link[0] === input.link);
+          if (linkInfo) {
+            const sourceNodeId = linkInfo[1];
+            const outputIndex = linkInfo[2] || 0;
+            
+            // Set the input reference as [nodeId, outputIndex]
+            nodeConfig.inputs[input.name] = [String(sourceNodeId), outputIndex];
+          }
+        }
+      });
+    }
+  }
+  
+  // Helper method to clean up workflow by removing Note nodes and their links
+  _cleanWorkflow(workflow) {
+    return {
+      ...workflow,
+      nodes: workflow.nodes.filter(node => node.type !== 'Note'),
+      links: workflow.links.filter(link => {
+        const sourceNodeId = link[1];
+        const targetNodeId = link[3];
+        const sourceNode = workflow.nodes.find(n => n.id === sourceNodeId);
+        const targetNode = workflow.nodes.find(n => n.id === targetNodeId);
+        return !(sourceNode?.type === 'Note' || targetNode?.type === 'Note');
+      })
+    };
   }
   
   /**
@@ -1189,12 +1274,12 @@ class ComfyUIClient {
    */
   updateTextToVideoWorkflow(workflow, prompt, negativePrompt = "poor quality, blurry, pixelated, low resolution, watermark, signature, text, letters, words") {
     // Validate input workflow
-    const validation = this.validateWorkflow(workflow);
-    if (!validation.valid) {
-      const errorMessage = `Invalid workflow: ${validation.errors.join(', ')}`;
-      console.error('❌ ' + errorMessage);
-      throw new Error(errorMessage);
-    }
+    // const validation = this.validateWorkflow(workflow);
+    // if (!validation.valid) {
+    //   const errorMessage = `Invalid workflow: ${validation.errors.join(', ')}`;
+    //   console.error('❌ ' + errorMessage);
+    //   throw new Error(errorMessage);
+    // }
 
     console.log(`Updating text-to-video workflow with prompt: ${prompt.slice(0, 30)}...`);
     
@@ -1354,7 +1439,7 @@ class ComfyUIClient {
       console.log('Created simplified workflow for text-to-video generation');
       return { prompt: simplifiedWorkflow };
     }
-    
+    console.log('Updated workflow:', promptUpdated);
     return updatedWorkflow;
   }
 }
