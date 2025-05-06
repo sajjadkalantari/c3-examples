@@ -411,8 +411,34 @@ const ImageToVideoGenerator = ({ apiKey }) => {
       // Get the first video (typically from SaveVideo node)
       const targetVideo = videos[0];
       
-      // Download the video for displaying
-      const videoUrl = await comfyClient.downloadFile(targetVideo.url);
+      let videoUrl;
+      
+      // Try to download the video first
+      try {
+        setStatusMessage('Downloading video...');
+        console.log('Attempting to download video via proxy:', targetVideo.url);
+        videoUrl = await comfyClient.downloadFile(targetVideo.url);
+        
+        if (!videoUrl) {
+          // If download failed, use direct URL as fallback
+          console.log('Proxy download failed, using direct URL');
+          videoUrl = targetVideo.url;
+          if (videoUrl.includes(comfyClient.serverUrl)) {
+            // Replace proxy URL with original URL if needed
+            videoUrl = videoUrl.replace(comfyClient.serverUrl, comfyClient.originalServerUrl);
+          }
+        }
+      } catch (downloadErr) {
+        console.error('Error downloading video:', downloadErr);
+        // Use direct URL as fallback
+        videoUrl = targetVideo.url;
+        if (videoUrl.includes(comfyClient.serverUrl)) {
+          // Replace proxy URL with original URL if needed
+          videoUrl = videoUrl.replace(comfyClient.serverUrl, comfyClient.originalServerUrl);
+        }
+      }
+      
+      console.log('Final video URL being used:', videoUrl);
       
       // Add to results
       const newResult = {
@@ -425,7 +451,8 @@ const ImageToVideoGenerator = ({ apiKey }) => {
         numFrames,
         fps,
         seed: seed || Math.floor(Math.random() * 2147483647),
-        steps
+        steps,
+        directLink: !videoUrl.startsWith('blob:') // Flag to indicate if this is a direct URL
       };
       
       setResults(prevResults => [newResult, ...prevResults]);
@@ -669,14 +696,26 @@ const ImageToVideoGenerator = ({ apiKey }) => {
                   {results.map((result) => (
                     <div key={result.id} className="border rounded-lg overflow-hidden bg-gray-50">
                       <div className="aspect-video bg-black relative">
-                        <video 
-                          controls 
-                          className="absolute w-full h-full object-contain"
-                          poster={result.thumbnailUrl}
-                          src={result.videoUrl}
-                          autoPlay={false}
-                          loop
-                        />
+                        {/* Handle either blob URL or direct URL */}
+                        {result.directLink ? (
+                          // For direct links, open in iframe to avoid CORS issues
+                          <iframe 
+                            src={result.videoUrl}
+                            className="absolute w-full h-full border-0"
+                            allow="autoplay; fullscreen"
+                            allowFullScreen
+                          ></iframe>
+                        ) : (
+                          // For blob URLs, use video element
+                          <video 
+                            controls 
+                            className="absolute w-full h-full object-contain"
+                            poster={result.thumbnailUrl}
+                            src={result.videoUrl}
+                            autoPlay={false}
+                            loop
+                          />
+                        )}
                       </div>
                       
                       <div className="p-4 border-t bg-white">
@@ -688,7 +727,7 @@ const ImageToVideoGenerator = ({ apiKey }) => {
                           <div>FPS: {result.fps}</div>
                           <div>Motion: {result.motionStrength}</div>
                         </div>
-                        <div className="mt-2 flex justify-end">
+                        <div className="mt-2 flex justify-end space-x-3">
                           <a 
                             href={result.videoUrl} 
                             target="_blank" 
@@ -696,6 +735,14 @@ const ImageToVideoGenerator = ({ apiKey }) => {
                             className="inline-flex items-center text-sm text-blue-600 hover:text-blue-500"
                           >
                             <FiPlay className="mr-1" /> Download
+                          </a>
+                          <a 
+                            href={result.videoUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center text-sm text-green-600 hover:text-green-500"
+                          >
+                            <FiFilm className="mr-1" /> View in New Tab
                           </a>
                         </div>
                       </div>

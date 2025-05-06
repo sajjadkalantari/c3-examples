@@ -115,7 +115,6 @@ const TextToImageGenerator = ({ apiKey }) => {
   const [error, setError] = useState('');
   const [debug, setDebug] = useState(false);
   const [workflowData, setWorkflowData] = useState(null);
-  const [imageBlobUrl, setImageBlobUrl] = useState('');
   const [directUrlCopied, setDirectUrlCopied] = useState(false);
   const directUrlRef = useRef(null);
 
@@ -259,18 +258,31 @@ const TextToImageGenerator = ({ apiKey }) => {
       const targetImage = node9Images.length > 0 ? node9Images[node9Images.length - 1] : images[0];
       console.log('Selected target image:', targetImage);
       
-      // Get image URL
+      // Try to download the image using the ComfyUI client's downloadFile method
+      // This should handle authentication properly
+      let blobUrl = null;
+      try {
+        setStatusMessage('Downloading image...');
+        console.log('Downloading image through proxy:', targetImage.url);
+        blobUrl = await comfyClient.downloadFile(targetImage.url);
+        console.log('Image downloaded successfully, blob URL:', blobUrl ? 'created' : 'failed');
+      } catch (downloadErr) {
+        console.error('Error downloading image:', downloadErr);
+      }
+      
+      // Get image URL - this one includes &type=output by default
       const imageUrl = comfyClient.getImageUrl(targetImage.filename, targetImage.subfolder);
       console.log('Final image URL:', imageUrl);
-      
-      // Also try a direct URL format in case the standard one doesn't work
-      const directImageUrl = `${comfyClient.originalServerUrl}/output/${targetImage.filename}`;
-      console.log('Alternative direct URL:', directImageUrl);
+  
+      // Create an alternate URL without the &type=output param
+      const cleanDirectUrl = `${comfyClient.originalServerUrl}/view?filename=${encodeURIComponent(targetImage.filename)}${targetImage.subfolder ? `&subfolder=${encodeURIComponent(targetImage.subfolder)}` : ''}`;
+      console.log('Clean direct URL (no type param):', cleanDirectUrl);
       
       setStatusMessage('Done!');
       setResult({
         imageUrl,
-        directImageUrl,
+        cleanDirectUrl,
+        blobUrl,  // Add the blob URL to the result
         originalFilename: targetImage.filename,
         prompt,
         negativePrompt,
@@ -335,7 +347,6 @@ const TextToImageGenerator = ({ apiKey }) => {
         
         testImg.onload = () => {
           console.log('Image loaded successfully');
-          setImageBlobUrl(preparedUrl);
           
           // Also store in localStorage as backup
           if (result && result.originalFilename) {
@@ -365,8 +376,6 @@ const TextToImageGenerator = ({ apiKey }) => {
           })
           .then(blob => {
             const objectUrl = URL.createObjectURL(blob);
-            setImageBlobUrl(objectUrl);
-            console.log('Created blob URL for image:', objectUrl);
             
             // Save the blob to localStorage for future use
             const reader = new FileReader();
@@ -392,15 +401,14 @@ const TextToImageGenerator = ({ apiKey }) => {
               const savedImage = localStorage.getItem(`img_${result.originalFilename}`);
               if (savedImage) {
                 console.log('Loading image from localStorage');
-                setImageBlobUrl(savedImage);
-                return;
+                testImg.src = savedImage;
               }
             }
             
             // Try the alternative URL if the first one fails
-            if (imageUrl === result.imageUrl && result.directImageUrl) {
+            if (imageUrl === result.imageUrl && result.cleanDirectUrl) {
               console.log('Primary image URL failed, trying alternative URL');
-              loadImageWithHeaders(result.directImageUrl);
+              loadImageWithHeaders(result.cleanDirectUrl);
             }
           });
         };
@@ -412,72 +420,88 @@ const TextToImageGenerator = ({ apiKey }) => {
 
   // Function to download the image directly
   const downloadImage = () => {
-    if (!result || !result.imageUrl) return;
+    if (!result) return;
     
-    const directUrl = getDirectImageUrl(result.imageUrl);
+    // If we have a blob URL, use it directly as it's already downloaded and authenticated
+    if (result.blobUrl) {
+      const a = document.createElement('a');
+      a.href = result.blobUrl;
+      a.download = result.originalFilename || 'generated-image.png';
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up after download
+      setTimeout(() => {
+        document.body.removeChild(a);
+      }, 100);
+      
+      return;
+    }
     
-    // First prepare by accessing through proxy
-    prepareImageForViewing(result.imageUrl)
-      .then(() => {
-        // Then try direct download
-        fetch(directUrl, {
-          headers: {
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'accept-language': 'en-US,en;q=0.9',
-            'cache-control': 'max-age=0',
-            'sec-fetch-dest': 'document',
-            'sec-fetch-mode': 'navigate',
-            'sec-fetch-site': 'none',
-            'sec-fetch-user': '?1',
-            'upgrade-insecure-requests': '1',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
-          },
-          credentials: 'include'
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+    // Fallback to the clean URL without &type=output if available
+    const directUrl = getDirectImageUrl(result.cleanDirectUrl || result.imageUrl);
+    
+    // First set API key cookie
+    setApiKeyCookie(apiKey);
+    
+    // Then try direct download
+    fetch(directUrl, {
+      headers: {
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'accept-language': 'en-US,en;q=0.9',
+        'cache-control': 'max-age=0',
+        'sec-fetch-dest': 'document',
+        'sec-fetch-mode': 'navigate',
+        'sec-fetch-site': 'none',
+        'sec-fetch-user': '?1',
+        'upgrade-insecure-requests': '1',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+      },
+      credentials: 'include'
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+      }
+      return response.blob();
+    })
+    .then(blob => {
+      // Create a download link and trigger it
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = result.originalFilename || 'generated-image.png';
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up after download
+      setTimeout(() => {
+        URL.revokeObjectURL(downloadUrl);
+        document.body.removeChild(a);
+      }, 100);
+      
+      // Also save to localStorage
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = () => {
+        const base64data = reader.result;
+        try {
+          if (result && result.originalFilename) {
+            localStorage.setItem(`img_${result.originalFilename}`, base64data);
+            console.log('Saved downloaded image to localStorage');
           }
-          return response.blob();
-        })
-        .then(blob => {
-          // Create a download link and trigger it
-          const downloadUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = downloadUrl;
-          a.download = result.originalFilename || 'generated-image.png';
-          document.body.appendChild(a);
-          a.click();
-          
-          // Clean up after download
-          setTimeout(() => {
-            URL.revokeObjectURL(downloadUrl);
-            document.body.removeChild(a);
-          }, 100);
-          
-          // Also save to localStorage
-          const reader = new FileReader();
-          reader.readAsDataURL(blob);
-          reader.onloadend = () => {
-            const base64data = reader.result;
-            try {
-              if (result && result.originalFilename) {
-                localStorage.setItem(`img_${result.originalFilename}`, base64data);
-                console.log('Saved downloaded image to localStorage');
-              }
-            } catch (e) {
-              console.error('Failed to save image to localStorage:', e);
-            }
-          };
-        })
-        .catch(error => {
-          console.error('Error downloading image:', error);
-          alert('Failed to download image. Please try again.');
-        });
-      });
+        } catch (e) {
+          console.error('Failed to save image to localStorage:', e);
+        }
+      };
+    })
+    .catch(error => {
+      console.error('Error downloading image:', error);
+      alert('Failed to download image. Please try again.');
+    });
   };
 
-  // Direct image loading fallback
+  // Display download instructions if image fails to load
   const displayDownloadInstructions = () => {
     if (!result || !result.imageUrl) return;
     
@@ -487,7 +511,7 @@ const TextToImageGenerator = ({ apiKey }) => {
       <div>
         <p>Unable to load the image directly. Please try one of these options:</p>
         <ol className="list-decimal pl-5 my-2">
-          <li>Click the "Download Image Directly" button below</li>
+          <li>Click the "Download Image" button below</li>
           <li>
             <a 
               href={directUrl}
@@ -504,36 +528,42 @@ const TextToImageGenerator = ({ apiKey }) => {
     );
   };
 
-  // Load the image when the result changes
+  // Monitor for image loading issues
   useEffect(() => {
     if (result && result.imageUrl) {
       // Clear any previous errors
       setError('');
       
-      // Try to load the image
-      loadImageWithHeaders(result.imageUrl);
+      // Set API key cookie again to ensure authentication
+      setApiKeyCookie(apiKey);
       
-      // If the image fails to load after 5 seconds, show download instructions
+      // If image doesn't appear after 5 seconds, show download instructions
       const timer = setTimeout(() => {
-        if (!imageBlobUrl) {
+        const img = document.querySelector('.mt-6 img');
+        if (img && (!img.complete || img.naturalHeight === 0)) {
           displayDownloadInstructions();
         }
       }, 5000);
       
       return () => {
         clearTimeout(timer);
-        if (imageBlobUrl) {
-          URL.revokeObjectURL(imageBlobUrl);
-        }
       };
     }
-  }, [result, imageBlobUrl]);
+  }, [result, apiKey]);
 
   // Debug image function - create a standalone HTML page to show the image
   const handleImageDisplay = () => {
-    if (!result || !result.imageUrl) return;
+    if (!result) return;
     
-    const directUrl = getDirectImageUrl(result.imageUrl);
+    // If we have a blob URL, use it directly - it's already authenticated
+    if (result.blobUrl) {
+      // Open a new window with the blob URL
+      const win = window.open(result.blobUrl, '_blank');
+      return;
+    }
+    
+    // Fallback to the clean URL or original URL
+    const directUrl = getDirectImageUrl(result.cleanDirectUrl || result.imageUrl);
     const proxiedUrl = getProxiedUrlForFetch(directUrl);
     
     // Check if we already have this image in localStorage
@@ -1124,19 +1154,35 @@ const TextToImageGenerator = ({ apiKey }) => {
         <div className="mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Generated Image</h3>
           <div className="flex flex-col items-center">
-            {imageBlobUrl ? (
-              <img 
-                src={imageBlobUrl} 
-                alt="Generated image" 
-                className="max-w-full h-auto rounded shadow-lg mb-4" 
-              />
-            ) : (
-              <div className="w-full h-64 flex items-center justify-center bg-gray-200 rounded-lg mb-4">
-                <p className="text-gray-600">Loading image...</p>
-              </div>
-            )}
+            {/* Updated image display approach - prioritize blob URL to avoid authentication issues */}
+            <img 
+              src={result.blobUrl || getDirectImageUrl(result.cleanDirectUrl || result.imageUrl)} 
+              alt="Generated image" 
+              className="max-w-full h-auto rounded shadow-lg mb-4"
+              onError={(e) => {
+                console.error('Error loading image directly:', e);
+                if (e.target.src === result.blobUrl && result.cleanDirectUrl) {
+                  // If blob URL fails, try the clean URL
+                  console.log('Blob URL failed, trying clean URL');
+                  e.target.src = getDirectImageUrl(result.cleanDirectUrl);
+                } else if (e.target.src === getDirectImageUrl(result.cleanDirectUrl) && result.imageUrl) {
+                  // If clean URL fails, try the original URL
+                  console.log('Clean URL failed, trying original URL');
+                  e.target.src = getDirectImageUrl(result.imageUrl);
+                } else {
+                  // If all direct methods fail, try to load from localStorage if available
+                  if (result.originalFilename) {
+                    const savedImage = localStorage.getItem(`img_${result.originalFilename}`);
+                    if (savedImage) {
+                      console.log('Loading image from localStorage');
+                      e.target.src = savedImage;
+                    }
+                  }
+                }
+              }}
+            />
             
-            {/* Direct URL field for copy/paste */}
+            {/* Direct URL field for copy/paste - use clean URL */}
             <div className="w-full mb-4">
               <p className="text-sm font-medium text-gray-700 mb-1">Direct Image URL:</p>
               <div className="flex">
@@ -1144,7 +1190,7 @@ const TextToImageGenerator = ({ apiKey }) => {
                   ref={directUrlRef}
                   type="text"
                   readOnly
-                  value={getDirectImageUrl(result.imageUrl)}
+                  value={getDirectImageUrl(result.cleanDirectUrl || result.imageUrl)}
                   className="flex-grow shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-l-md"
                 />
                 <button
@@ -1178,34 +1224,33 @@ const TextToImageGenerator = ({ apiKey }) => {
               >
                 View Image in New Tab
               </button>
-              <a 
-                href={imageBlobUrl} 
-                download={result.originalFilename || 'generated-image.png'}
-                className="text-blue-600 hover:text-blue-800 text-sm underline"
-              >
-                Download Image via Blob URL
-              </a>
               <button
                 onClick={downloadImage}
                 className="text-blue-600 hover:text-blue-800 text-sm underline"
               >
-                Download Image Directly
+                Download Image
               </button>
             </div>
             
             {debug && (
               <div className="mt-4 w-full">
                 <p className="text-sm font-semibold">Image URLs:</p>
+                <p className="text-xs break-all"><span className="font-semibold">Blob URL:</span> {result.blobUrl || 'None (download failed)'}</p>
                 <p className="text-xs break-all"><span className="font-semibold">API URL:</span> {result.imageUrl}</p>
                 <p className="text-xs break-all"><span className="font-semibold">Direct URL:</span> {getDirectImageUrl(result.imageUrl)}</p>
-                <p className="text-xs break-all"><span className="font-semibold">Alternate URL:</span> {result.directImageUrl}</p>
+                <p className="text-xs break-all"><span className="font-semibold">Clean Direct URL:</span> {result.cleanDirectUrl}</p>
                 <p className="text-xs break-all"><span className="font-semibold">Original Filename:</span> {result.originalFilename}</p>
-                <p className="text-xs break-all"><span className="font-semibold">Blob URL:</span> {imageBlobUrl}</p>
                 <button 
                   className="mt-2 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs"
                   onClick={() => {
                     if (result.imageUrl) {
-                      loadImageWithHeaders(result.imageUrl);
+                      // Set API key cookie again before reloading
+                      setApiKeyCookie(apiKey);
+                      // Try the direct URL
+                      const img = document.querySelector('.mt-6 img');
+                      if (img) {
+                        img.src = getDirectImageUrl(result.imageUrl);
+                      }
                     }
                   }}
                 >
