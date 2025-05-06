@@ -94,11 +94,36 @@ const ImageToImageGenerator = ({ apiKey }) => {
       
       // Upload the image
       setStatusMessage('Uploading image...');
-      const imageName = await comfyClient.uploadFile(uploadedImage, 'input');
+      // Get the file extension
+      const fileExtension = uploadedImage.name.split('.').pop().toLowerCase();
       
-      if (!imageName) {
+      // Create a standardized filename to use
+      const safeFilename = `uploaded_image_${Date.now()}.${fileExtension}`;
+      
+      // Create a new file object with the safe filename
+      const renamedFile = new File([uploadedImage], safeFilename, { type: uploadedImage.type });
+      
+      // Upload with the renamed file
+      const uploadResponse = await comfyClient.uploadFile(renamedFile, 'input');
+      
+      if (!uploadResponse) {
         throw new Error('Failed to upload image');
       }
+      
+      // Extract the image name from the response - could be a string or object
+      let imageName;
+      if (typeof uploadResponse === 'object' && uploadResponse.name) {
+        imageName = uploadResponse.name;
+        console.log(`Server returned image object with name: ${imageName}`);
+      } else if (typeof uploadResponse === 'string') {
+        imageName = uploadResponse;
+        console.log(`Server returned image name as string: ${imageName}`);
+      } else {
+        imageName = safeFilename;
+        console.log(`Using fallback image name: ${imageName}`);
+      }
+      
+      console.log(`Successfully uploaded image as: ${imageName}`);
       
       // Load workflow template
       setStatusMessage('Loading workflow template...');
@@ -115,13 +140,40 @@ const ImageToImageGenerator = ({ apiKey }) => {
       // Create a modified copy of the workflow
       const updatedWorkflow = JSON.parse(JSON.stringify(workflow));
       
-      // Update the workflow nodes
+      // Fix the hardcoded image name in LoadImage nodes (by node ID and by type)
+      // This directly targets the widgets_values array that contains the hardcoded name
+      for (let i = 0; i < updatedWorkflow.nodes.length; i++) {
+        const node = updatedWorkflow.nodes[i];
+        
+        // Find the LoadImage node both by ID and type
+        if (node.id === 76 || node.type === 'LoadImage') {
+          console.log(`Found LoadImage node (ID: ${node.id}), updating widgets_values`);
+          
+          // Check if widgets_values exists and fix the image name
+          if (node.widgets_values && Array.isArray(node.widgets_values) && node.widgets_values.length > 0) {
+            // Replace the hardcoded filename with our uploaded image name
+            node.widgets_values[0] = imageName;
+            console.log(`Updated LoadImage widgets_values[0] to: ${imageName}`);
+          }
+        }
+      }
+      
+      // Now update the nodes by class_type (this is the usual way)
       for (const nodeId in updatedWorkflow) {
         const node = updatedWorkflow[nodeId];
         
         // Update LoadImage node
         if (node.class_type === 'LoadImage') {
+          // Set the image parameter correctly
+          node.inputs = node.inputs || {};
           node.inputs.image = imageName;
+          console.log(`Set LoadImage node (${nodeId}) image parameter to: ${imageName}`);
+          
+          // Some ComfyUI versions might also need to update widgets_values
+          if (node.widgets_values && Array.isArray(node.widgets_values)) {
+            node.widgets_values[0] = imageName;
+            console.log(`Updated LoadImage widgets_values[0] to: ${imageName}`);
+          }
         }
         
         // Update KSampler node
@@ -145,6 +197,18 @@ const ImageToImageGenerator = ({ apiKey }) => {
           node.inputs.width = parseInt(width);
           node.inputs.height = parseInt(height);
         }
+        
+        // Update ImageResize+ node
+        if (node.class_type === 'ImageResize+') {
+          // Set all required parameters
+          node.inputs = node.inputs || {};
+          node.inputs.width = parseInt(width);
+          node.inputs.height = parseInt(height);
+          node.inputs.method = "pad";
+          node.inputs.interpolation = "nearest";
+          node.inputs.condition = "always";
+          node.inputs.multiple_of = 2;
+        }
       }
       
       // Queue workflow
@@ -162,6 +226,26 @@ const ImageToImageGenerator = ({ apiKey }) => {
       });
       
       if (!isComplete) {
+        // If we have details about the error, include them in the error message
+        if (comfyClient.lastErrorDetails) {
+          let errorMsg = 'Workflow processing failed: ';
+          
+          if (comfyClient.lastErrorDetails.node_errors) {
+            // Format node errors
+            const nodeErrors = Object.entries(comfyClient.lastErrorDetails.node_errors)
+              .map(([nodeId, error]) => `Node ${nodeId}: ${error}`)
+              .join('; ');
+            
+            errorMsg += nodeErrors;
+          } else if (comfyClient.lastErrorDetails.message) {
+            errorMsg += comfyClient.lastErrorDetails.message;
+          } else {
+            errorMsg += JSON.stringify(comfyClient.lastErrorDetails);
+          }
+          
+          throw new Error(errorMsg);
+        }
+        
         throw new Error('Workflow processing failed or timed out');
       }
       
@@ -208,7 +292,31 @@ const ImageToImageGenerator = ({ apiKey }) => {
       
     } catch (err) {
       console.error('Error generating image:', err);
-      setError(`Error: ${err.message || 'Unknown error occurred'}`);
+      // Check for detailed API error response
+      if (err.response && err.response.data) {
+        const errorData = err.response.data;
+        let errorMessage = 'Unknown error occurred';
+        
+        if (errorData.error) {
+          errorMessage = `${errorData.error.message || 'Error'}: `;
+          
+          // Include node errors if available
+          if (errorData.node_errors) {
+            const nodeErrors = Object.entries(errorData.node_errors)
+              .map(([nodeId, error]) => {
+                const errors = error.errors.map(e => e.message).join(', ');
+                return `Node ${nodeId} (${error.class_type || 'unknown'}): ${errors}`;
+              })
+              .join('; ');
+            
+            errorMessage += nodeErrors;
+          }
+        }
+        
+        setError(errorMessage);
+      } else {
+        setError(`Error: ${err.message || 'Unknown error occurred'}`);
+      }
     } finally {
       setIsProcessing(false);
     }

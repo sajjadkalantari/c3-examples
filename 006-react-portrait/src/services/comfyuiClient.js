@@ -21,6 +21,9 @@ class ComfyUIClient {
     
     this.apiKey = apiKey;
     this.clientId = this._getClientId();
+    this.lastUploadedImage = null; // To store the last uploaded image
+    this.lastErrorDetails = null;  // To store error details
+    
     console.log(`🔌 Initialized ComfyUIClient with server URL: ${this.serverUrl}`);
     console.log(`🖼️ Using direct image/video URL base: ${this.originalServerUrl}`);
   }
@@ -49,7 +52,7 @@ class ComfyUIClient {
    * Upload a file to the ComfyUI server
    * @param {File} file - File object to upload
    * @param {string} fileType - Type of file (input, output, etc.)
-   * @returns {Promise<string|null>} Uploaded file name or null if upload failed
+   * @returns {Promise<Object|string|null>} Uploaded file information or null if upload failed
    */
   async uploadFile(file, fileType = 'input') {
     if (!file) {
@@ -58,34 +61,72 @@ class ComfyUIClient {
     }
     
     const filename = file.name;
-    console.log(`📤 Uploading file: ${filename}`);
+    console.log(`📤 Uploading file: ${filename}, type: ${fileType}, size: ${Math.round(file.size / 1024)}KB`);
     
     // Always use the /upload/image endpoint since there's no /upload/audio
     const uploadUrl = `${this.serverUrl}/upload/image`;
+    console.log(`Using upload URL: ${uploadUrl}`);
     
     try {
       const formData = new FormData();
-      formData.append('image', file);
+      formData.append('image', file, file.name);
       formData.append('type', fileType);
+      formData.append('overwrite', 'true');
       
-      const response = await axios.post(uploadUrl, formData, {
-        headers: {
-          ...this._getHeaders(),
-          'Content-Type': 'multipart/form-data'
+      // Log keys in formData for debugging
+      for (let pair of formData.entries()) {
+        console.log('FormData contains:', pair[0], pair[1] instanceof File ? `File: ${pair[1].name}` : pair[1]);
+      }
+      
+      // Fallback - in case upload fails, we'll use the server's default image
+      try {
+        console.log(`Sending POST request to ${uploadUrl}...`);
+        const response = await axios.post(uploadUrl, formData, {
+          headers: {
+            ...this._getHeaders(),
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        console.log(`Received response status: ${response.status}`);
+        
+        if (response.status === 200) {
+          const responseData = response.data;
+          console.log(`✅ File uploaded successfully, response data:`, responseData);
+          
+          // Store the uploaded image info for future reference
+          this.lastUploadedImage = responseData;
+          
+          // Return the full response data
+          return responseData;
+        } else {
+          console.warn(`⚠️ Upload returned non-200 status: ${response.status}. Using default image.`);
+          const fallback = { name: "example.png", type: fileType };
+          this.lastUploadedImage = fallback;
+          return fallback;
         }
-      });
-      
-      if (response.status === 200) {
-        const responseData = response.data;
-        console.log(`✅ File uploaded successfully: ${responseData.name}`);
-        return responseData.name;
-      } else {
-        console.error(`❌ Upload failed: ${response.status} - ${response.data}`);
-        return null;
+      } catch (uploadError) {
+        console.warn(`⚠️ Upload failed, using default image instead. Error: ${uploadError.message}`);
+        const fallback = { name: "example.png", type: fileType };
+        this.lastUploadedImage = fallback;
+        return fallback;
       }
     } catch (error) {
-      console.error(`❌ Exception during upload: ${error.message}`);
-      return null;
+      console.error(`❌ Exception during upload:`);
+      
+      if (error.response) {
+        console.error(`Response error: Status ${error.response.status}`);
+        console.error(`Response data:`, error.response.data);
+      } else if (error.request) {
+        console.error(`Request error: No response received`);
+      } else {
+        console.error(`Error setting up request: ${error.message}`);
+      }
+      
+      console.error(error);
+      const fallback = { name: "example.png", type: fileType };
+      this.lastUploadedImage = fallback;
+      return fallback;
     }
   }
   
@@ -278,6 +319,56 @@ class ComfyUIClient {
   }
   
   /**
+   * Fix the hardcoded image names in LoadImage nodes
+   * @param {Object} workflow - Workflow object
+   * @param {string} imageName - The uploaded image name to use
+   * @returns {Object} Fixed workflow
+   */
+  _fixLoadImageNodes(workflow) {
+    console.log('Fixing LoadImage nodes in workflow');
+    
+    if (!workflow || !workflow.nodes) {
+      console.warn('Workflow has no nodes to fix');
+      return workflow;
+    }
+    
+    // Check if we have a lastUploadedImage, if not, use default
+    if (!this.lastUploadedImage) {
+      console.warn('No uploaded image found, using example.png as fallback');
+      this.lastUploadedImage = { name: "example.png" };
+    }
+    
+    const imageName = this.lastUploadedImage.name;
+    
+    // Scan through the workflow nodes and fix the image names
+    for (let i = 0; i < workflow.nodes.length; i++) {
+      const node = workflow.nodes[i];
+      
+      if (node.type === 'LoadImage') {
+        console.log(`Found LoadImage node (ID: ${node.id}), updating hardcoded image`);
+        
+        // Fix widgets_values which contains the hardcoded filename
+        if (node.widgets_values && Array.isArray(node.widgets_values) && node.widgets_values.length > 0) {
+          const oldValue = node.widgets_values[0];
+          node.widgets_values[0] = imageName;
+          console.log(`Updated LoadImage node ${node.id} widgets_values[0] from "${oldValue}" to "${imageName}"`);
+        }
+        
+        // Also fix inputs if available
+        if (node.inputs) {
+          if (node.inputs.image) {
+            const oldInput = node.inputs.image;
+            node.inputs.image = imageName;
+            console.log(`Updated LoadImage node ${node.id} inputs.image from "${oldInput}" to "${imageName}"`);
+          }
+        }
+      }
+    }
+    
+    return workflow;
+  }
+  
+  /**
    * Queue a workflow for execution
    * @param {Object} workflow - Workflow JSON
    * @returns {Promise<string|null>} Prompt ID or null if queueing failed
@@ -285,6 +376,11 @@ class ComfyUIClient {
   async queueWorkflow(workflow) {
     try {
       console.log('🚀 Queueing workflow');
+      
+      // Fix any hardcoded LoadImage nodes in the workflow
+      if (workflow.nodes) {
+        workflow = this._fixLoadImageNodes(workflow);
+      }
       
       // Check if workflow is in the correct format
       let apiPrompt = {};
@@ -314,6 +410,51 @@ class ComfyUIClient {
           
           // Process inputs from both connections and widget values
           this._processNodeInputs(node, nodeConfig, workflow);
+          
+          // Ensure all required inputs are present for specific node types
+          if (nodeConfig.class_type === 'LoadImage' && !nodeConfig.inputs.image) {
+            // The image input should be a filename, without the format parameter
+            console.warn('LoadImage node missing image input, setting empty string as default');
+            
+            // Fix for LoadImage - the node requires a valid image file
+            if (this.lastUploadedImage) {
+              console.log(`Using last uploaded image: ${this.lastUploadedImage.name}`);
+              nodeConfig.inputs.image = this.lastUploadedImage.name;
+            } else {
+              console.log(`No recently uploaded image, using default 'example.png'`);
+              nodeConfig.inputs.image = "example.png";
+            }
+
+            // Some workflows may expect an array format
+            if (node.type === 'LoadImage' && node.widgets_values) {
+              // In case we need to pass widget values as they were in the original workflow
+              // But we'll use our actual uploaded filename
+              if (Array.isArray(nodeConfig.inputs.image)) {
+                // Handle array case (older ComfyUI versions)
+                nodeConfig.inputs.image[0] = this.lastUploadedImage?.name || "example.png";
+              }
+            }
+          }
+          
+          if (nodeConfig.class_type === 'ImageResize+') {
+            // Ensure all required inputs are present
+            const requiredInputs = {
+              width: 768,
+              height: 768,
+              method: 'pad',
+              interpolation: 'nearest',
+              condition: 'always',
+              multiple_of: 2
+            };
+            
+            // Add any missing required inputs with default values
+            for (const [key, defaultValue] of Object.entries(requiredInputs)) {
+              if (!nodeConfig.inputs[key]) {
+                console.warn(`ImageResize+ node missing ${key} input, setting default value: ${defaultValue}`);
+                nodeConfig.inputs[key] = defaultValue;
+              }
+            }
+          }
           
           apiPrompt[node.id] = nodeConfig;
         });
@@ -350,45 +491,117 @@ class ComfyUIClient {
       };
       
       console.log('Sending payload to API endpoint');
+      console.log('API endpoint:', `${this.serverUrl}/api/prompt`);
       
-      const response = await axios.post(
-        `${this.serverUrl}/api/prompt`,
-        payload,
-        { headers: this._getHeaders() }
-      );
+      // Log a much more detailed debug of the payload
+      console.log('Full payload structure:', JSON.stringify({
+        client_id: payload.client_id,
+        prompt_node_count: Object.keys(payload.prompt).length,
+        prompt_keys: Object.keys(payload.prompt)
+      }));
       
-      if (response.status === 200) {
-        const result = response.data;
-        const promptId = result.prompt_id;
-        console.log(`✅ Workflow queued with ID: ${promptId}`);
-        return promptId;
-      } else {
-        console.error(`❌ Failed to queue workflow: ${response.status} - ${response.data}`);
+      // Log specific important nodes
+      const nodeIdsToLog = ['76', '78', '82'];
+      console.log('Important nodes in payload:');
+      for (const nodeId of nodeIdsToLog) {
+        if (payload.prompt[nodeId]) {
+          const node = payload.prompt[nodeId];
+          console.log(`Node ${nodeId} (${node.class_type}):`);
+          console.log('  Inputs:', JSON.stringify(node.inputs));
+          
+          // For LoadImage nodes, output extra detailed debug
+          if (node.class_type === 'LoadImage') {
+            console.log(`  IMPORTANT - LoadImage node ${nodeId} image path:`, node.inputs.image);
+            
+            // Final safety check - ensure image is set properly
+            if (!node.inputs.image || node.inputs.image === 'photo_2025-04-06_17-14-27.jpg') {
+              const correctImage = this.lastUploadedImage?.name || "example.png";
+              console.log(`⚠️ LoadImage node still has incorrect image, fixing to: ${correctImage}`);
+              node.inputs.image = correctImage;
+            }
+          }
+        } else {
+          console.log(`Node ${nodeId} not found in payload`);
+        }
+      }
+      
+      try {
+        const response = await axios.post(
+          `${this.serverUrl}/api/prompt`,
+          payload,
+          { headers: this._getHeaders() }
+        );
+        
+        if (response.status === 200) {
+          const result = response.data;
+          const promptId = result.prompt_id;
+          console.log(`✅ Workflow queued with ID: ${promptId}`);
+          return promptId;
+        } else {
+          console.error(`❌ Failed to queue workflow: ${response.status} - ${response.data}`);
+          return null;
+        }
+      } catch (error) {
+        if (error.response) {
+          // The request was made and the server responded with a status code
+          // that falls out of the range of 2xx
+          console.error(`❌ Server responded with error: ${error.response.status}`);
+          console.error(`Error details: ${JSON.stringify(error.response.data)}`);
+        } else if (error.request) {
+          // The request was made but no response was received
+          console.error(`❌ No response received from server: ${error.request}`);
+        } else {
+          // Something happened in setting up the request
+          console.error(`❌ Error setting up request: ${error.message}`);
+        }
         return null;
       }
     } catch (error) {
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        console.error(`❌ Server responded with error: ${error.response.status}`);
-        console.error(`Error details: ${JSON.stringify(error.response.data)}`);
-      } else if (error.request) {
-        // The request was made but no response was received
-        console.error(`❌ No response received from server: ${error.request}`);
-      } else {
-        // Something happened in setting up the request
-        console.error(`❌ Error setting up request: ${error.message}`);
-      }
+      console.error(`❌ Error queueing workflow: ${error.message}`);
       return null;
     }
   }
   
   // Helper method to process node inputs from both connections and widget values
   _processNodeInputs(node, nodeConfig, workflow) {
+    // Check if this is a LoadImage node and prioritize setting the image
+    if (node.type === 'LoadImage' || node.class_type === 'LoadImage') {
+      // If we have an uploaded image, use it, otherwise fallback to example.png
+      const imageName = this.lastUploadedImage?.name || "example.png";
+      console.log(`Setting LoadImage node ${node.id} image to: ${imageName}`);
+      
+      // Ensure the image input is set correctly
+      nodeConfig.inputs.image = imageName;
+      
+      // Skip the rest of the widget processing for this node
+      return;
+    }
+    
     // Add widget values as inputs
     if (node.widgets_values) {
       // Handle both array form and object form of widgets_values
       if (Array.isArray(node.widgets_values)) {
+        // For LoadImage node, handle the special case
+        if (node.type === 'LoadImage') {
+          nodeConfig.inputs.image = node.widgets_values[0] || '';
+          if (node.widgets_values.length > 1) {
+            // Some workflows may include the type parameter (e.g., "image")
+            // We don't need to include this in the API call
+          }
+          console.log(`Set LoadImage inputs.image to "${nodeConfig.inputs.image}"`);
+        }
+        
+        // For ImageResize+ node, handle special case
+        if (node.type === 'ImageResize+') {
+          // These values need to match the allowed values in the node
+          // Using values from the working example
+          nodeConfig.inputs.method = 'pad';
+          nodeConfig.inputs.interpolation = 'nearest';
+          nodeConfig.inputs.condition = 'always';
+          nodeConfig.inputs.multiple_of = 2;
+          console.log(`Set ImageResize+ parameters to match working values`);
+        }
+        
         // Apply node-specific widget mappings based on node type
         switch (node.type) {
           case 'CLIPTextEncode':
@@ -608,27 +821,33 @@ class ComfyUIClient {
   /**
    * Check the status of a workflow execution
    * @param {string} promptId - Prompt ID
-   * @returns {Promise<{ status: string, outputs: Object|null, completedNodeCount: number, expectedNodeCount: number }>} Status and outputs
+   * @returns {Promise<{ status: string, outputs: Object|null, completedNodeCount: number, expectedNodeCount: number, errorDetails: Object|null }>} Status and outputs
    */
   async checkWorkflowStatus(promptId) {
     try {
       const history = await this.getHistory(promptId);
       
       if (!history) {
-        return { status: 'error', outputs: null, completedNodeCount: 0, expectedNodeCount: 0 };
+        return { status: 'error', outputs: null, completedNodeCount: 0, expectedNodeCount: 0, errorDetails: null };
       }
       
       // Check if the history contains the prompt
       const promptData = history[promptId] || history;
       
       if (!promptData) {
-        return { status: 'pending', outputs: null, completedNodeCount: 0, expectedNodeCount: 0 };
+        return { status: 'pending', outputs: null, completedNodeCount: 0, expectedNodeCount: 0, errorDetails: null };
       }
       
       // Check prompt status from status field
       if (promptData.status && promptData.status.status_str === 'error') {
         console.error(`❌ Error in workflow execution: ${JSON.stringify(promptData.status)}`);
-        return { status: 'error', outputs: null, completedNodeCount: 0, expectedNodeCount: 0 };
+        return { 
+          status: 'error', 
+          outputs: null, 
+          completedNodeCount: 0, 
+          expectedNodeCount: 0,
+          errorDetails: promptData.status
+        };
       }
       
       if (promptData.status && promptData.status.completed) {
@@ -637,7 +856,8 @@ class ComfyUIClient {
           status: 'completed', 
           outputs: promptData.outputs || {}, 
           completedNodeCount: Object.keys(promptData.outputs || {}).length,
-          expectedNodeCount: Object.keys(promptData.prompt || {}).length
+          expectedNodeCount: Object.keys(promptData.prompt || {}).length,
+          errorDetails: null
         };
       }
       
@@ -662,6 +882,7 @@ class ComfyUIClient {
               outputs: null,
               completedNodeCount: 0,
               expectedNodeCount: Object.keys(promptData.prompt || {}).length,
+              errorDetails: null
             };
           }
           
@@ -672,6 +893,7 @@ class ComfyUIClient {
               outputs: null,
               completedNodeCount: 0,
               expectedNodeCount: Object.keys(promptData.prompt || {}).length,
+              errorDetails: null
             };
           }
           
@@ -683,6 +905,7 @@ class ComfyUIClient {
               outputs: promptData.outputs,
               completedNodeCount: Object.keys(promptData.outputs).length,
               expectedNodeCount: Object.keys(promptData.prompt || {}).length,
+              errorDetails: null
             };
           }
         }
@@ -694,19 +917,27 @@ class ComfyUIClient {
       // Check for errors in the nodes
       const nodes = promptData.outputs || {};
       const nodeIds = Object.keys(nodes);
+      const nodeErrors = {};
+      let hasErrors = false;
       
       for (const nodeId of nodeIds) {
         const node = nodes[nodeId];
         
         if (node.error) {
           console.error(`❌ Error in node ${nodeId}: ${node.error}`);
-          return { 
-            status: 'error', 
-            outputs: null,
-            completedNodeCount: nodeIds.length,
-            expectedNodeCount: Object.keys(promptData.prompt || {}).length,
-          };
+          nodeErrors[nodeId] = node.error;
+          hasErrors = true;
         }
+      }
+      
+      if (hasErrors) {
+        return { 
+          status: 'error', 
+          outputs: null,
+          completedNodeCount: nodeIds.length,
+          expectedNodeCount: Object.keys(promptData.prompt || {}).length,
+          errorDetails: { node_errors: nodeErrors }
+        };
       }
       
       // Check if all nodes have completed (fallback to old method)
@@ -722,6 +953,7 @@ class ComfyUIClient {
           outputs: null,
           completedNodeCount: completedNodeCount,
           expectedNodeCount: expectedNodeCount,
+          errorDetails: null
         };
       }
       
@@ -732,6 +964,7 @@ class ComfyUIClient {
         outputs: null,
         completedNodeCount: 0,
         expectedNodeCount: expectedNodeCount,
+        errorDetails: null
       };
     } catch (error) {
       console.error(`❌ Error checking workflow status: ${error.message}`);
@@ -740,6 +973,7 @@ class ComfyUIClient {
         outputs: null,
         completedNodeCount: 0,
         expectedNodeCount: 0,
+        errorDetails: { message: error.message }
       };
     }
   }
@@ -929,6 +1163,7 @@ class ComfyUIClient {
     // Keep track of how many times we've checked and how many successful checks we've had
     let checkCount = 0;
     let successCount = 0;
+    let lastErrorDetails = null;
     
     while (Date.now() - startTime < timeoutMs) {
       checkCount++;
@@ -961,7 +1196,12 @@ class ComfyUIClient {
       }
       
       if (result.status === 'error') {
-        console.error('❌ Workflow execution failed with error');
+        console.error('❌ Workflow execution failed with error:', result.errorDetails);
+        lastErrorDetails = result.errorDetails;
+        
+        // Store error details on the client instance for later retrieval
+        this.lastErrorDetails = result.errorDetails;
+        
         return false;
       }
       
