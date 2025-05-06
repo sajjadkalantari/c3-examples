@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ComfyUIClient from '../services/comfyuiClient';
 import Comput3API from '../services/comput3Api';
 import config from '../services/config';
-import { FiUploadCloud, FiImage, FiSliders, FiCopy } from 'react-icons/fi';
+import { FiUploadCloud, FiImage, FiSliders, FiCopy, FiDownload, FiExternalLink } from 'react-icons/fi';
 
 const ImageToImageGenerator = ({ apiKey }) => {
   const [uploadedImage, setUploadedImage] = useState(null);
@@ -272,19 +272,41 @@ const ImageToImageGenerator = ({ apiKey }) => {
       // Get the most recent image
       const targetImage = previewImages.length > 0 ? previewImages[0] : images[0];
       
-      // Get image URL
+      // Try to download the image using the ComfyUI client's downloadFile method
+      // This should handle authentication properly
+      let blobUrl = null;
+      try {
+        setStatusMessage('Downloading image...');
+        console.log('Downloading image through proxy:', targetImage.url);
+        blobUrl = await comfyClient.downloadFile(targetImage.url);
+        console.log('Image downloaded successfully, blob URL:', blobUrl ? 'created' : 'failed');
+      } catch (downloadErr) {
+        console.error('Error downloading image:', downloadErr);
+      }
+      
+      // Get image URL - this one includes &type=output by default
       const imageUrl = comfyClient.getImageUrl(targetImage.filename, targetImage.subfolder);
+      console.log('Final image URL:', imageUrl);
+      
+      // Create an alternate URL without the &type=output param
+      const cleanDirectUrl = `${comfyClient.originalServerUrl}/view?filename=${encodeURIComponent(targetImage.filename)}${targetImage.subfolder ? `&subfolder=${encodeURIComponent(targetImage.subfolder)}` : ''}`;
+      console.log('Clean direct URL (no type param):', cleanDirectUrl);
       
       // Add to results
       const newResult = {
         id: Date.now(),
         imageUrl,
+        cleanDirectUrl,
+        blobUrl,
         inputImageUrl: uploadedImagePreview,
+        originalFilename: targetImage.filename,
         prompt,
         negativePrompt,
         strength,
         seed: seedValue,
-        steps
+        steps,
+        width,
+        height
       };
       
       setResults(prevResults => [newResult, ...prevResults]);
@@ -320,6 +342,99 @@ const ImageToImageGenerator = ({ apiKey }) => {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Helper function to copy URL to clipboard
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('URL copied to clipboard!');
+    }).catch(err => {
+      console.error('Could not copy text: ', err);
+    });
+  };
+
+  // Helper function to download an image
+  const downloadImage = (result) => {
+    if (!result) return;
+    
+    // If we have a blob URL, use it directly as it's already downloaded and authenticated
+    if (result.blobUrl) {
+      const a = document.createElement('a');
+      a.href = result.blobUrl;
+      a.download = result.originalFilename || 'generated-image.png';
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up after download
+      setTimeout(() => {
+        document.body.removeChild(a);
+      }, 100);
+      
+      return;
+    }
+    
+    // Fallback to the clean URL
+    const directUrl = result.cleanDirectUrl || result.imageUrl;
+    
+    // Set API key cookie for authentication
+    const expires = new Date();
+    expires.setDate(expires.getDate() + 1);
+    document.cookie = `c3_api_key=${apiKey}; expires=${expires.toUTCString()}; path=/`;
+    
+    // Try direct download
+    fetch(directUrl, {
+      headers: {
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'accept-language': 'en-US,en;q=0.9',
+        'cache-control': 'max-age=0',
+        'sec-fetch-dest': 'document',
+        'sec-fetch-mode': 'navigate',
+        'sec-fetch-site': 'none',
+        'sec-fetch-user': '?1',
+        'upgrade-insecure-requests': '1',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+      },
+      credentials: 'include'
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+      }
+      return response.blob();
+    })
+    .then(blob => {
+      // Create a download link and trigger it
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = result.originalFilename || 'generated-image.png';
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up after download
+      setTimeout(() => {
+        URL.revokeObjectURL(downloadUrl);
+        document.body.removeChild(a);
+      }, 100);
+    })
+    .catch(error => {
+      console.error('Error downloading image:', error);
+      alert('Failed to download image. Please try again.');
+    });
+  };
+
+  // Helper function to view image in a new tab
+  const viewInNewTab = (result) => {
+    if (!result) return;
+    
+    // If we have a blob URL, use it directly
+    if (result.blobUrl) {
+      window.open(result.blobUrl, '_blank');
+      return;
+    }
+    
+    // Otherwise open the clean URL
+    window.open(result.cleanDirectUrl || result.imageUrl, '_blank');
   };
 
   return (
@@ -548,40 +663,86 @@ const ImageToImageGenerator = ({ apiKey }) => {
               </div>
               
               <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6">
                   {results.map((result) => (
                     <div key={result.id} className="border rounded-lg overflow-hidden bg-gray-50">
-                      <div className="flex">
-                        <div className="w-1/2 border-r">
-                          <div className="aspect-square relative">
+                      <div className="flex flex-col md:flex-row">
+                        <div className="md:w-1/2 border-r p-4">
+                          <h4 className="text-sm font-medium mb-2">Input Image</h4>
+                          <div className="aspect-square relative mb-2">
                             <img
                               src={result.inputImageUrl}
                               alt="Input"
-                              className="absolute w-full h-full object-cover"
+                              className="max-w-full h-auto rounded shadow"
                             />
                           </div>
-                          <div className="p-2 text-xs text-gray-500 text-center border-t">Input</div>
                         </div>
-                        <div className="w-1/2">
-                          <div className="aspect-square relative">
+                        <div className="md:w-1/2 p-4">
+                          <h4 className="text-sm font-medium mb-2">Generated Image</h4>
+                          <div className="aspect-square relative mb-2">
+                            {/* Prioritize blob URL to avoid authentication issues */}
                             <img
-                              src={result.imageUrl}
-                              alt="Output"
-                              className="absolute w-full h-full object-cover"
+                              src={result.blobUrl || result.cleanDirectUrl || result.imageUrl}
+                              alt="Generated"
+                              className="max-w-full h-auto rounded shadow"
+                              onError={(e) => {
+                                console.error('Error loading output image:', e);
+                                // Try fallback URLs
+                                if (e.target.src === result.blobUrl && result.cleanDirectUrl) {
+                                  console.log('Blob URL failed, trying clean URL');
+                                  e.target.src = result.cleanDirectUrl;
+                                } else if (e.target.src === result.cleanDirectUrl && result.imageUrl) {
+                                  console.log('Clean URL failed, trying original URL');
+                                  e.target.src = result.imageUrl;
+                                }
+                              }}
                             />
                           </div>
-                          <div className="p-2 text-xs text-gray-500 text-center border-t">Output</div>
+                          
+                          {/* Image actions */}
+                          <div className="flex space-x-3 mt-2">
+                            <button
+                              onClick={() => downloadImage(result)}
+                              className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                            >
+                              <FiDownload className="mr-1" /> Download
+                            </button>
+                            <button
+                              onClick={() => viewInNewTab(result)}
+                              className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                            >
+                              <FiExternalLink className="mr-1" /> View
+                            </button>
+                            <button
+                              onClick={() => copyToClipboard(result.cleanDirectUrl || result.imageUrl)}
+                              className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                            >
+                              <FiCopy className="mr-1" /> Copy URL
+                            </button>
+                          </div>
                         </div>
                       </div>
                       
-                      <div className="p-3 border-t bg-white">
+                      <div className="p-4 border-t bg-white">
                         <div className="truncate text-sm">
                           <span className="font-medium">Prompt:</span> {result.prompt || "(empty)"}
                         </div>
-                        <div className="flex justify-between text-xs text-gray-500 mt-1">
-                          <span>Strength: {result.strength}</span>
-                          <span>Steps: {result.steps}</span>
-                          <span>Seed: {result.seed}</span>
+                        <div className="text-sm mt-1">
+                          <span className="font-medium">Negative Prompt:</span> {result.negativePrompt || "(empty)"}
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-500 mt-2">
+                          <div>
+                            <span className="font-medium">Strength:</span> {result.strength}
+                          </div>
+                          <div>
+                            <span className="font-medium">Steps:</span> {result.steps}
+                          </div>
+                          <div>
+                            <span className="font-medium">Seed:</span> {result.seed}
+                          </div>
+                          <div>
+                            <span className="font-medium">Size:</span> {result.width}x{result.height}
+                          </div>
                         </div>
                       </div>
                     </div>
