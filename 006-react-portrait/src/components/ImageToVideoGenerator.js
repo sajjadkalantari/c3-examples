@@ -91,72 +91,293 @@ const ImageToVideoGenerator = ({ apiKey }) => {
     try {
       // Initialize ComfyUI client
       const comfyClient = new ComfyUIClient(comfyuiUrl, apiKey);
-      
+      const safeFilename = "example.png";
       // Upload the image
       setStatusMessage('Uploading image...');
-      const imageName = await comfyClient.uploadFile(uploadedImage, 'input');
-      
+      const uploadResponse = await comfyClient.uploadFile(uploadedImage, 'input');
+      let imageName;
+      if (typeof uploadResponse === 'object' && uploadResponse.name) {
+        imageName = uploadResponse.name;
+        console.log(`Server returned image object with name: ${imageName}`);
+      } else if (typeof uploadResponse === 'string') {
+        imageName = uploadResponse;
+        console.log(`Server returned image name as string: ${imageName}`);
+      } else {
+        imageName = safeFilename;
+        console.log(`Using fallback image name: ${imageName}`);
+      }
       if (!imageName) {
         throw new Error('Failed to upload image');
       }
       
-      // Load workflow template
-      setStatusMessage('Loading workflow template...');
-      const workflow = await comfyClient.loadWorkflow(`${process.env.PUBLIC_URL}${config.IMAGE_TO_VIDEO_WORKFLOW_PATH}`);
+      // Skip loading workflow template and create a new one directly
+      setStatusMessage('Creating workflow...');
       
-      if (!workflow) {
-        throw new Error('Failed to load workflow template');
-      }
-      
-      // Update workflow with parameters
-      setStatusMessage('Updating workflow parameters...');
-      const seedValue = seed || Math.floor(Math.random() * 2147483647);
-      
-      // Create a modified copy of the workflow
-      const updatedWorkflow = JSON.parse(JSON.stringify(workflow));
-      
-      // Update the workflow nodes
-      for (const nodeId in updatedWorkflow) {
-        const node = updatedWorkflow[nodeId];
-        
-        // Update LoadImage node
-        if (node.class_type === 'LoadImage') {
-          node.inputs.image = imageName;
-        }
-        
-        // Update CLIPTextEncode nodes
-        if (node.class_type === 'CLIPTextEncode') {
-          if (node._meta?.title === 'Positive Prompt') {
-            node.inputs.text = prompt;
-          } else if (node._meta?.title === 'Negative Prompt') {
-            node.inputs.text = negativePrompt;
+      // Create a new workflow with the correct structure
+      const clientId = Math.random().toString(36).substring(2, 15);
+      const newWorkflow = {
+        "client_id": clientId,
+        "prompt": {
+          // WanVideo T5 TextEncoder
+          "11": {
+            "inputs": {
+              "model_name": "umt5-xxl-enc-bf16.safetensors",
+              "precision": "bf16",
+              "load_device": "offload_device",
+              "quantization": "disabled"
+            },
+            "class_type": "LoadWanVideoT5TextEncoder",
+            "_meta": {"title": "Load WanVideo T5 TextEncoder"}
+          },
+          
+          // WanVideo TextEncode
+          "16": {
+            "inputs": {
+              "positive_prompt": prompt,
+              "negative_prompt": negativePrompt,
+              "force_offload": true,
+              "t5": ["11", 0],
+              "model_to_offload": ["22", 0]
+            },
+            "class_type": "WanVideoTextEncode",
+            "_meta": {"title": "WanVideo TextEncode"}
+          },
+          
+          // WanVideo Model Loader
+          "22": {
+            "inputs": {
+              "model": "WanVideo/Wan2_1-I2V-14B-480P_fp8_e4m3fn.safetensors",
+              "base_precision": "fp16",
+              "quantization": "fp8_e4m3fn",
+              "load_device": "offload_device",
+              "attention_mode": "sdpa",
+              "compile_args": ["35", 0],
+              "block_swap_args": ["39", 0]
+            },
+            "class_type": "WanVideoModelLoader",
+            "_meta": {"title": "WanVideo Model Loader"}
+          },
+          
+          // WanVideo Sampler
+          "27": {
+            "inputs": {
+              "steps": parseInt(steps),
+              "cfg": 6,
+              "shift": 5,
+              "seed": parseInt(seed || Math.floor(Math.random() * 2147483647)),
+              "force_offload": true,
+              "scheduler": "unipc",
+              "riflex_freq_index": 0,
+              "denoise_strength": 1,
+              "batched_cfg": "",
+              "rope_function": "comfy",
+              "model": ["22", 0],
+              "text_embeds": ["16", 0],
+              "image_embeds": ["63", 0],
+              "feta_args": ["55", 0],
+              "teacache_args": ["52", 0]
+            },
+            "class_type": "WanVideoSampler",
+            "_meta": {"title": "WanVideo Sampler"}
+          },
+          
+          // WanVideo Decode
+          "28": {
+            "inputs": {
+              "enable_vae_tiling": false,
+              "tile_x": 272,
+              "tile_y": 272,
+              "tile_stride_x": 144,
+              "tile_stride_y": 128,
+              "vae": ["38", 0],
+              "samples": ["27", 0]
+            },
+            "class_type": "WanVideoDecode",
+            "_meta": {"title": "WanVideo Decode"}
+          },
+          
+          // Video Combine
+          "30": {
+            "inputs": {
+              "frame_rate": parseInt(fps),
+              "loop_count": 0,
+              "filename_prefix": `image_to_video_${Date.now()}`,
+              "format": "video/h264-mp4",
+              "pix_fmt": "yuv420p",
+              "crf": 19,
+              "save_metadata": true,
+              "trim_to_audio": false,
+              "pingpong": false,
+              "save_output": true,
+              "images": ["28", 0]
+            },
+            "class_type": "VHS_VideoCombine",
+            "_meta": {"title": "Video Combine 🎥🅥🅗🅢"}
+          },
+          
+          // Torch Compile Settings
+          "35": {
+            "inputs": {
+              "backend": "inductor",
+              "fullgraph": false,
+              "mode": "default",
+              "dynamic": false,
+              "dynamo_cache_size_limit": 64,
+              "compile_transformer_blocks_only": true,
+              "dynamo_recompile_limit": 128
+            },
+            "class_type": "WanVideoTorchCompileSettings",
+            "_meta": {"title": "WanVideo Torch Compile Settings"}
+          },
+          
+          // WanVideo VAE Loader
+          "38": {
+            "inputs": {
+              "model_name": "Wan2_1_VAE_bf16.safetensors",
+              "precision": "bf16"
+            },
+            "class_type": "WanVideoVAELoader",
+            "_meta": {"title": "WanVideo VAE Loader"}
+          },
+          
+          // WanVideo BlockSwap
+          "39": {
+            "inputs": {
+              "blocks_to_swap": 10,
+              "offload_img_emb": false,
+              "offload_txt_emb": false,
+              "use_non_blocking": true,
+              "vace_blocks_to_swap": 0
+            },
+            "class_type": "WanVideoBlockSwap",
+            "_meta": {"title": "WanVideo BlockSwap"}
+          },
+          
+          // WanVideo VRAM Management (added based on sample)
+          "45": {
+            "inputs": {
+              "offload_percent": 1
+            },
+            "class_type": "WanVideoVRAMManagement",
+            "_meta": {"title": "WanVideo VRAM Management"}
+          },
+          
+          // WanVideo TeaCache
+          "52": {
+            "inputs": {
+              "rel_l1_thresh": 0.25,
+              "start_step": 1,
+              "end_step": -1,
+              "cache_device": "offload_device",
+              "use_coefficients": "true",
+              "mode": "e"
+            },
+            "class_type": "WanVideoTeaCache",
+            "_meta": {"title": "WanVideo TeaCache"}
+          },
+          
+          // WanVideo Enhance-A-Video
+          "55": {
+            "inputs": {
+              "weight": 2,
+              "start_percent": 0,
+              "end_percent": 1
+            },
+            "class_type": "WanVideoEnhanceAVideo",
+            "_meta": {"title": "WanVideo Enhance-A-Video"}
+          },
+          
+          // Load Image
+          "58": {
+            "inputs": {
+              "image": imageName
+            },
+            "class_type": "LoadImage",
+            "_meta": {"title": "Load Image"}
+          },
+          
+          // CLIP Vision Loader
+          "59": {
+            "inputs": {
+              "clip_name": "clip_vision_h.safetensors"
+            },
+            "class_type": "CLIPVisionLoader",
+            "_meta": {"title": "Load CLIP Vision"}
+          },
+          
+          // WanVideo ImageToVideo Encode
+          "63": {
+            "inputs": {
+              "width": ["66", 1],
+              "height": ["66", 2],
+              "num_frames": parseInt(numFrames),
+              "noise_aug_strength": 0.03,
+              "start_latent_strength": 1,
+              "end_latent_strength": 1,
+              "force_offload": true,
+              "fun_or_fl2v_model": false,
+              "vae": ["38", 0],
+              "clip_embeds": ["65", 0],
+              "start_image": ["66", 0]
+            },
+            "class_type": "WanVideoImageToVideoEncode",
+            "_meta": {"title": "WanVideo ImageToVideo Encode"}
+          },
+          
+          // WanVideo ClipVision Encode
+          "65": {
+            "inputs": {
+              "strength_1": 1,
+              "strength_2": 1,
+              "crop": "center",
+              "combine_embeds": "average",
+              "force_offload": true,
+              "tiles": 0,
+              "ratio": 0.2,
+              "clip_vision": ["59", 0],
+              "image_1": ["66", 0]
+            },
+            "class_type": "WanVideoClipVisionEncode",
+            "_meta": {"title": "WanVideo ClipVision Encode"}
+          },
+          
+          // Resize Image
+          "66": {
+            "inputs": {
+              "width": 624,
+              "height": 624,
+              "upscale_method": "lanczos",
+              "keep_proportion": false,
+              "divisible_by": 16,
+              "crop": "disabled",
+              "image": ["58", 0]
+            },
+            "class_type": "ImageResizeKJ",
+            "_meta": {"title": "Resize Image"}
+          }
+        },
+        "extra_data": {
+          "extra_pnginfo": {
+            "workflow": {
+              "id": `${Math.random().toString(36).substring(2, 15)}`,
+              "revision": 0,
+              "last_node_id": 67,
+              "last_link_id": 84
+            }
           }
         }
-        
-        // Update SVD Image-to-Video Conditioning node
-        if (node.class_type === 'SVD_img2vid_Conditioning') {
-          node.inputs.num_frames = parseInt(numFrames);
-          node.inputs.fps = parseInt(fps);
-          node.inputs.motion_bucket_id = parseInt(motionStrength);
-          node.inputs.seed = parseInt(seedValue);
-        }
-        
-        // Update SVD Image-to-Video Sampler node
-        if (node.class_type === 'SVD_img2vid_Sampler') {
-          node.inputs.steps = parseInt(steps);
-          node.inputs.seed = parseInt(seedValue);
-        }
-        
-        // Update SaveVideo node
-        if (node.class_type === 'SaveVideo') {
-          node.inputs.frame_rate = parseInt(fps);
-          node.inputs.filename_prefix = `image_to_video_${Date.now()}`;
-        }
-      }
+      };
+      
+      // Print debug info
+      console.log('Debug node 27:', JSON.stringify(newWorkflow.prompt["27"]));
+      console.log('Debug node 59:', JSON.stringify(newWorkflow.prompt["59"]));
+      console.log('Debug node 63:', JSON.stringify(newWorkflow.prompt["63"]));
+      console.log('Debug node 65:', JSON.stringify(newWorkflow.prompt["65"]));
+      console.log('Debug node 66:', JSON.stringify(newWorkflow.prompt["66"]));
       
       // Queue workflow
       setStatusMessage('Queueing workflow...');
-      const promptId = await comfyClient.queueWorkflow(updatedWorkflow);
+      const promptId = await comfyClient.queueWorkflow(newWorkflow);
       
       if (!promptId) {
         throw new Error('Failed to queue workflow');
@@ -203,7 +424,7 @@ const ImageToVideoGenerator = ({ apiKey }) => {
         motionStrength,
         numFrames,
         fps,
-        seed: seedValue,
+        seed: seed || Math.floor(Math.random() * 2147483647),
         steps
       };
       

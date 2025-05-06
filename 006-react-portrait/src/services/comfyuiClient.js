@@ -490,6 +490,11 @@ class ComfyUIClient {
         extra_data: extraData
       };
       
+      // If the original workflow already had a client_id at the top level, use that instead
+      if (workflow.client_id) {
+        payload.client_id = workflow.client_id;
+      }
+      
       console.log('Sending payload to API endpoint');
       console.log('API endpoint:', `${this.serverUrl}/api/prompt`);
       
