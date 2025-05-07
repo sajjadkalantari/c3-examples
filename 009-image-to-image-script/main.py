@@ -10,11 +10,17 @@ import os
 import argparse
 import sys
 import logging
+import base64
+import time
+from pathlib import Path
 from typing import Optional, Dict, List, Any
 
 from config import C3_API_KEY, DEFAULT_OUTPUT_DIR, WORKFLOW_TEMPLATE_PATH
 from comput3_api import Comput3API
 from comfyui_client import ComfyUIClient
+
+# For caching images
+CACHE_DIR = os.path.join(os.getcwd(), "cache")
 
 def parse_arguments():
     """Parse command-line arguments"""
@@ -29,6 +35,10 @@ def parse_arguments():
                        help=f"Directory to save output files (default: {DEFAULT_OUTPUT_DIR})")
     parser.add_argument("--timeout", "-t", type=int, default=15,
                        help="Timeout in minutes (default: 15)")
+    parser.add_argument("--cache", action="store_true", 
+                       help="Cache images for faster access in case of network issues")
+    parser.add_argument("--cache-dir", type=str, default=CACHE_DIR,
+                       help=f"Directory to store cached images (default: {CACHE_DIR})")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
     
     return parser.parse_args()
@@ -69,6 +79,61 @@ def check_requirements():
     
     return True
 
+def print_status_update(status: str):
+    """Print a status update to the console"""
+    # Get terminal width
+    try:
+        import shutil
+        width = shutil.get_terminal_size().columns
+    except:
+        width = 80
+    
+    # Clear line and print status
+    print(f"\r{' ' * width}", end="\r")
+    print(f"\r🔄 {status}", end="", flush=True)
+
+def store_image_as_base64(image_path: str, cache_dir: str, filename: str) -> Optional[str]:
+    """Store an image as base64 for caching"""
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Read the image file
+        with open(image_path, 'rb') as f:
+            image_data = f.read()
+        
+        # Detect mime type (naive approach)
+        ext = Path(image_path).suffix.lower()
+        mime_type = "image/jpeg" if ext in ['.jpg', '.jpeg'] else "image/png"
+        
+        # Convert to base64
+        base64_data = base64.b64encode(image_data).decode('utf-8')
+        data_url = f"data:{mime_type};base64,{base64_data}"
+        
+        # Save to cache file
+        cache_file = os.path.join(cache_dir, f"{filename}.b64")
+        with open(cache_file, 'w') as f:
+            f.write(data_url)
+        
+        logging.info(f"🗄️ Stored image as base64 in: {cache_file}")
+        return cache_file
+        
+    except Exception as e:
+        logging.error(f"❌ Error storing image as base64: {str(e)}")
+        return None
+
+def load_image_from_base64(cache_dir: str, filename: str) -> Optional[str]:
+    """Load a cached base64 image"""
+    cache_file = os.path.join(cache_dir, f"{filename}.b64")
+    
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, 'r') as f:
+                return f.read()
+        except Exception as e:
+            logging.error(f"❌ Error loading cached image: {str(e)}")
+    
+    return None
+
 def main():
     """Main entry point"""
     # Parse arguments
@@ -95,6 +160,10 @@ def main():
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
+    
+    # Create cache directory if caching is enabled
+    if args.cache:
+        os.makedirs(args.cache_dir, exist_ok=True)
     
     # Initialize Comput3 API client
     logging.info("🚀 Initializing Comput3 API client...")
@@ -129,6 +198,12 @@ def main():
         logging.error(f"❌ Failed to load workflow template: {str(e)}")
         return 1
     
+    # Validate the workflow structure
+    validation = comfy_client.validate_workflow(workflow)
+    if not validation["valid"]:
+        logging.error(f"❌ Invalid workflow structure: {', '.join(validation['errors'])}")
+        return 1
+    
     # Update workflow with image and prompts
     logging.info("🔄 Updating workflow with inputs...")
     updated_workflow = comfy_client.update_workflow(
@@ -149,12 +224,19 @@ def main():
     
     # Step 4: Wait for workflow to complete
     logging.info(f"⏳ Waiting for workflow to complete (max {args.timeout} minutes)...")
-    if not comfy_client.wait_for_workflow_completion(prompt_id, args.timeout):
+    if not comfy_client.wait_for_workflow_completion(
+        prompt_id, 
+        args.timeout,
+        status_callback=print_status_update
+    ):
+        print()  # Add a newline after status updates
         logging.error("❌ Workflow processing failed or timed out.")
         logging.error("💡 Common reasons for failure:")
         logging.error("   • Server resources insufficient for processing")
         logging.error("   • Server timeout or network issues")
         return 1
+    
+    print()  # Add a newline after status updates
     
     # Step 5: Get output files
     logging.info("🔍 Getting output files...")
@@ -171,7 +253,7 @@ def main():
         logging.error("❌ No images found in output.")
         return 1
     
-    # Step 6: Download output files
+    # Step 6: Download output files with robust methods
     logging.info(f"📥 Downloading output images to: {args.output_dir}")
     
     # Find SaveImage node outputs
@@ -181,28 +263,109 @@ def main():
     # If no SaveImage outputs, use any output images
     target_images = save_image_outputs if save_image_outputs else images
     
-    # Download each image
-    success = False
-    for image in target_images:
+    # Download the most recent image (last in the list)
+    if target_images:
+        latest_image = target_images[-1]
+        filename = latest_image["filename"]
+        subfolder = latest_image["subfolder"]
+        
+        logging.info(f"🖼️ Downloading image: {filename}")
+        
+        # Try to download using the improved robust approach
         output_path = comfy_client.download_file(
-            image["filename"],
+            filename, 
             args.output_dir,
-            image["subfolder"]
+            subfolder
         )
+        
         if output_path:
-            success = True
-            print(f"✅ Downloaded: {output_path}")
-    
-    if success:
-        print("\n" + "=" * 60)
-        print(f"✨ Image transformation complete! ✨")
-        print(f"📁 Output saved to: {args.output_dir}")
-        print("=" * 60)
+            # Successful download
+            print("\n" + "=" * 60)
+            print(f"✨ Image transformation complete! ✨")
+            print(f"📁 Output saved to: {output_path}")
+            
+            # If caching is enabled, also store as base64
+            if args.cache:
+                cache_path = store_image_as_base64(output_path, args.cache_dir, filename)
+                if cache_path:
+                    print(f"🗄️ Image also cached for future use")
+            
+            # Generate direct URLs for the image
+            image_url = comfy_client.get_image_url(filename, subfolder)
+            clean_url = comfy_client.get_clean_image_url(filename, subfolder)
+            
+            print("\n📋 Image Details:")
+            print(f"  • Input Image: {os.path.basename(args.image)}")
+            print(f"  • Prompt: {args.prompt}")
+            print(f"  • Negative Prompt: {args.negative_prompt}")
+            print(f"  • Strength: {args.strength}")
+            print("\n🔗 Direct Image URLs:")
+            print(f"  • URL: {image_url}")
+            print(f"  • Clean URL: {clean_url}")
+            print("=" * 60)
+        else:
+            logging.error("❌ Failed to download image.")
+            
+            # Try to load from cache if available
+            if args.cache:
+                cached_image = load_image_from_base64(args.cache_dir, filename)
+                if cached_image:
+                    logging.info("🗄️ Found cached version of the image")
+                    cache_file_path = os.path.join(args.cache_dir, f"{filename}.b64")
+                    print("\n" + "=" * 60)
+                    print(f"⚠️ Failed to download image, but found cached version")
+                    print(f"📁 Cached image data: {cache_file_path}")
+                    print("=" * 60)
+                    return 0
+            
+            return 1
     else:
-        logging.error("❌ Failed to download any images.")
-        return 1
+        # If no specific target images identified, try to download any images
+        success = False
+        for image in images:
+            output_path = comfy_client.download_file(
+                image["filename"],
+                args.output_dir,
+                image["subfolder"]
+            )
+            if output_path:
+                success = True
+                
+                # If caching is enabled, also store as base64
+                if args.cache:
+                    store_image_as_base64(output_path, args.cache_dir, image["filename"])
+                
+                print("\n" + "=" * 60)
+                print(f"✨ Image transformation complete! ✨")
+                print(f"📁 Output saved to: {output_path}")
+                
+                # Generate direct URLs for the image
+                image_url = comfy_client.get_image_url(image["filename"], image["subfolder"])
+                clean_url = comfy_client.get_clean_image_url(image["filename"], image["subfolder"])
+                
+                print("\n📋 Image Details:")
+                print(f"  • Input Image: {os.path.basename(args.image)}")
+                print(f"  • Prompt: {args.prompt}")
+                print(f"  • Negative Prompt: {args.negative_prompt}")
+                print(f"  • Strength: {args.strength}")
+                print("\n🔗 Direct Image URLs:")
+                print(f"  • URL: {image_url}")
+                print(f"  • Clean URL: {clean_url}")
+                print("=" * 60)
+                break
+        
+        if not success:
+            logging.error("❌ Failed to download any images.")
+            return 1
     
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print("\n\n⚠️ Operation canceled by user")
+        sys.exit(1)
+    except Exception as e:
+        logging.exception(f"❌ Unhandled exception: {str(e)}")
+        sys.exit(1) 
