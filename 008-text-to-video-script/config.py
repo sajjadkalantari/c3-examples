@@ -21,6 +21,6 @@ DEFAULT_OUTPUT_DIR = os.path.join(os.getcwd(), "output")
 WORKFLOW_TEMPLATE_PATH = os.path.join(os.getcwd(), "workflows", "text_to_video.json")
 
 # ComfyUI configuration
-DEFAULT_TIMEOUT_MINUTES = 30
-CHECK_INTERVAL_SECONDS = 30
-INITIAL_WAIT_SECONDS = 5 
+DEFAULT_TIMEOUT_MINUTES = 120
+CHECK_INTERVAL_SECONDS = 10
+INITIAL_WAIT_SECONDS = 2 

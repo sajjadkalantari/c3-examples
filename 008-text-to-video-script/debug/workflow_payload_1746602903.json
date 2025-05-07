@@ -1,0 +1,133 @@
+{
+  "prompt": {
+    "1": {
+      "class_type": "LoadWanVideoT5TextEncoder",
+      "inputs": {
+        "model_name": "umt5-xxl-enc-bf16.safetensors",
+        "precision": "bf16",
+        "offload_model": "offload_device",
+        "offload_type": "disabled"
+      }
+    },
+    "2": {
+      "class_type": "WanVideoTextEncode",
+      "inputs": {
+        "t5": [
+          "1",
+          0
+        ],
+        "positive_prompt": "a cat eating pitza",
+        "negative_prompt": "poor quality, blurry, pixelated, low resolution, watermark, signature, text, letters, words",
+        "force_zeros": true
+      }
+    },
+    "3": {
+      "class_type": "WanVideoEmptyEmbeds",
+      "inputs": {
+        "width": 832,
+        "height": 480,
+        "num_frames": 16
+      }
+    },
+    "4": {
+      "class_type": "WanVideoBlockSwap",
+      "inputs": {
+        "blocks_to_swap": 20,
+        "offload_txt_emb": true,
+        "offload_img_emb": true
+      }
+    },
+    "5": {
+      "class_type": "WanVideoModelLoader",
+      "inputs": {
+        "block_swap_args": [
+          "4",
+          0
+        ],
+        "model": "WanVideo/Wan2_1-T2V-14B_fp8_e4m3fn.safetensors",
+        "base_precision": "fp16",
+        "load_device": "main_device",
+        "quantization": "disabled"
+      }
+    },
+    "6": {
+      "class_type": "WanVideoVAELoader",
+      "inputs": {
+        "model_name": "wan_2.1_vae.safetensors"
+      }
+    },
+    "7": {
+      "class_type": "WanVideoTeaCache",
+      "inputs": {
+        "start_step": 0.1,
+        "end_step": 0.7,
+        "rel_l1_thresh": 0.97,
+        "use_coefficients": false,
+        "cache_device": "offload_device"
+      }
+    },
+    "8": {
+      "class_type": "WanVideoSampler",
+      "inputs": {
+        "model": [
+          "5",
+          0
+        ],
+        "text_embeds": [
+          "2",
+          0
+        ],
+        "image_embeds": [
+          "3",
+          0
+        ],
+        "teacache_args": [
+          "7",
+          0
+        ],
+        "steps": 25,
+        "cfg": 6.0,
+        "seed": 2356586693,
+        "scheduler": "unipc",
+        "shift": 5,
+        "force_offload": false,
+        "riflex_freq_index": 0
+      }
+    },
+    "9": {
+      "class_type": "WanVideoDecode",
+      "inputs": {
+        "vae": [
+          "6",
+          0
+        ],
+        "samples": [
+          "8",
+          0
+        ],
+        "restore_faces": true,
+        "tile_x": 272,
+        "tile_y": 272,
+        "tile_stride_x": 144,
+        "tile_stride_y": 128,
+        "enable_vae_tiling": true
+      }
+    },
+    "10": {
+      "class_type": "VHS_VideoCombine",
+      "inputs": {
+        "images": [
+          "9",
+          0
+        ],
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "video_output",
+        "format": "video/h264-mp4",
+        "pingpong": false,
+        "save_output": true
+      }
+    }
+  },
+  "client_id": "767665d7-78f5-4285-8658-6ef32bfc35f5"
+}
